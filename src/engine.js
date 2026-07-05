@@ -49,22 +49,21 @@ half4 main(float2 coord) {
   vec3 finalColor = mix(color, hotspotColor, clamp(core * 0.95 + mid * 0.24, 0.0, 1.0));
 
   if (styleIndex > 0.5 && styleIndex < 1.5) {
-    float bowl = smoothstep(0.18, 0.86, uv.y);
-    float rim = smoothstep(0.42, 0.58, d) * (1.0 - smoothstep(0.62, 0.80, d));
-    alpha *= mix(0.82, 1.10, bowl);
-    alpha *= 1.0 - rim * 0.10;
-    finalColor = mix(finalColor, hotspotColor, 0.08 + 0.10 * bowl);
+    float bowl = smoothstep(0.12, 0.88, uv.y);
+    float rim = smoothstep(0.46, 0.54, d) * (1.0 - smoothstep(0.62, 0.82, d));
+    alpha *= mix(0.88, 1.08, bowl);
+    alpha *= 1.0 - rim * 0.12;
+    finalColor = mix(finalColor, hotspotColor, 0.10 + 0.08 * bowl);
   } else if (styleIndex > 1.5 && styleIndex < 2.5) {
-    float cageV = stripeMask(uv.x - 0.5, 19.0, 0.18);
-    float cageH = stripeMask(uv.y - 0.5, 17.0, 0.22) * smoothstep(0.0, 0.55, uv.y);
-    float ring = smoothstep(0.56, 0.62, d) * (1.0 - smoothstep(0.68, 0.80, d));
-    float cage = clamp(cageV * 0.80 + cageH * 0.35 + ring * 0.75, 0.0, 1.0);
-    alpha *= 1.0 - cage * 0.28;
-    finalColor = mix(finalColor, color, cage * 0.22);
+    float spokes = stripeMask(angle / 6.2831853, 8.0, 0.18);
+    float rings = stripeMask(d, 17.0, 0.20) * smoothstep(0.08, 0.98, d);
+    float cage = clamp(spokes * 0.65 + rings * 0.55, 0.0, 1.0);
+    alpha *= 1.0 - cage * 0.26;
+    finalColor = mix(finalColor, color, cage * 0.20);
   } else if (styleIndex > 2.5) {
-    float lobe = 0.90 + irregularity * 0.25 * sin(angle * 5.0 + flicker * 3.0 + dBase * 8.0);
+    float lobe = 0.88 + irregularity * 0.28 * sin(angle * 5.0 + flicker * 3.0 + dBase * 8.0);
     alpha *= lobe;
-    finalColor = mix(finalColor, hotspotColor, 0.10);
+    finalColor = mix(finalColor, hotspotColor, 0.12);
   }
 
   alpha = clamp(alpha, 0.0, 0.90);
@@ -90,36 +89,38 @@ float stripeMask(float p, float frequency, float thickness) {
 half4 main(float2 coord) {
   vec2 uv = coord / size;
   float y = uv.y;
-  float x = abs(uv.x - 0.5) * 2.0;
+  float x = uv.x - 0.5;
+  float xAbs = abs(x) * 2.0;
 
-  float taper = mix(0.12, clamp(spread, 0.24, 1.0), y);
-  float edge = 1.0 - smoothstep(taper * 0.76, taper, x);
+  float taper = mix(0.05, clamp(spread, 0.24, 1.0), y);
+  float edge = 1.0 - smoothstep(taper * 0.78, taper, xAbs);
   float startFade = smoothstep(0.00, 0.08, y);
-  float endFade = 1.0 - smoothstep(0.66, 1.0, y);
-  float sideFeather = 1.0 - smoothstep(0.84, 1.0, x);
+  float endFade = 1.0 - smoothstep(0.70, 1.0, y);
+  float sideFeather = 1.0 - smoothstep(0.84, 1.0, xAbs);
   float textureA = 0.88 + 0.12 * sin((uv.x * 10.0) + (uv.y * 2.5));
   float textureB = 0.92 + 0.08 * sin((uv.x * 17.0) - (uv.y * 5.0));
   float breakup = 1.0 - irregularity * 0.28 * (0.5 + 0.5 * sin(uv.y * 18.0 + uv.x * 6.0));
-  float core = 1.0 - smoothstep(0.0, 0.34, x);
 
   float alpha = edge * startFade * endFade * sideFeather * textureA * textureB * breakup * intensity * flicker;
+  float projectedX = x / max(0.08, y + 0.02);
   float styleShadow = 1.0;
 
   if (styleIndex > 0.5 && styleIndex < 1.5) {
-    float bars = stripeMask(uv.x - 0.5, 11.0, 0.20);
+    float bars = stripeMask(projectedX, 2.4, 0.16);
     styleShadow = 1.0 - bars * 0.42;
   } else if (styleIndex > 1.5 && styleIndex < 2.5) {
-    float barsV = stripeMask(uv.x - 0.5, 11.0, 0.20);
-    float barsH = stripeMask(uv.y - 0.1, 18.0, 0.18) * smoothstep(0.04, 0.28, y);
-    styleShadow = 1.0 - clamp(barsV * 0.35 + barsH * 0.24, 0.0, 0.72);
+    float bars = stripeMask(projectedX, 2.8, 0.16);
+    float grate = stripeMask(y, 16.0, 0.17) * smoothstep(0.02, 0.24, y);
+    styleShadow = 1.0 - clamp(bars * 0.36 + grate * 0.20, 0.0, 0.72);
   } else if (styleIndex > 2.5) {
-    float prison = stripeMask(uv.x - 0.5, 15.5, 0.24);
-    styleShadow = 1.0 - prison * 0.58;
+    float bars = stripeMask(projectedX, 3.8, 0.18);
+    styleShadow = 1.0 - bars * 0.56;
   }
 
   alpha *= styleShadow;
-  alpha = clamp(alpha * 0.56, 0.0, 0.78);
-  vec3 warm = mix(color, hotspotColor, clamp(core * 0.72 + (1.0 - y) * 0.22, 0.0, 1.0));
+  alpha = clamp(alpha * 0.60, 0.0, 0.80);
+  float centerGlow = 1.0 - smoothstep(0.0, 0.38, xAbs / max(0.08, taper));
+  vec3 warm = mix(color, hotspotColor, clamp(centerGlow * 0.76 + (1.0 - y) * 0.28, 0.0, 1.0));
   return half4(warm * alpha, alpha);
 }
 `;

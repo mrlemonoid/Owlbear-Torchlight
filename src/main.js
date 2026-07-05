@@ -47,14 +47,21 @@ function checkbox(id, label, checked) {
     </label>
   `;
 }
-function selectField(id, label, value, options) {
+function choiceField(id, label, value, options) {
   return `
-    <label class="field" for="${id}">
+    <div class="field style-field">
       <span class="field__top"><span>${label}</span><strong>${options.find((option) => option.value === value)?.label ?? value}</strong></span>
-      <select id="${id}" class="select-input" data-setting="${id}">
-        ${options.map((option) => `<option value="${option.value}" ${option.value === value ? "selected" : ""}>${option.label}</option>`).join("")}
-      </select>
-    </label>
+      <div class="choice-grid" data-choice-group="${id}">
+        ${options.map((option) => `
+          <button
+            type="button"
+            class="choice-button ${option.value === value ? "is-active" : ""}"
+            data-setting="${id}"
+            data-value="${option.value}"
+          >${option.label}</button>
+        `).join("")}
+      </div>
+    </div>
   `;
 }
 
@@ -90,22 +97,15 @@ function render() {
         <p class="muted" id="selectionInfo">${selectedCount ? `${selectedCount} Torchlight item selected.` : "No Torchlight item selected. The controls set the next light you add."}</p>
       </section>
 
-      <section class="card compact style-card">
-        <h2 class="section-title">Style</h2>
-        ${settings.sourceType === "beam" ? `
-          ${selectField("beamStyle", "Window / Beam Style", settings.beamStyle, BEAM_STYLE_OPTIONS)}
-        ` : `
-          ${selectField("torchStyle", "Torch Style", settings.torchStyle, TORCH_STYLE_OPTIONS)}
-        `}
-      </section>
-
       <section class="card compact">
         <h2 class="section-title">Settings</h2>
         ${settings.sourceType === "beam" ? `
+          ${choiceField("beamStyle", "Beam Style", settings.beamStyle, BEAM_STYLE_OPTIONS)}
           ${range("beamLength", "Beam Length", Math.round(settings.beamLength), 60, 1800, 10, " px")}
           ${range("beamWidth", "Beam Width", Math.round(settings.beamWidth), 20, 900, 10, " px")}
           ${range("irregularity", "Softness / Breakup", pct(settings.irregularity), 0, 100, 1, "%")}
         ` : `
+          ${choiceField("torchStyle", "Torch Style", settings.torchStyle, TORCH_STYLE_OPTIONS)}
           ${range("radius", "Radius", Math.round(settings.radius), 40, 1400, 10, " px")}
           ${range("sourceRadius", "Hot Core", Math.round(settings.sourceRadius), 1, 400, 1, " px")}
           ${range("irregularity", "Shape Irregularity", pct(settings.irregularity), 0, 100, 1, "%")}
@@ -249,10 +249,11 @@ function wireEvents() {
     });
   });
 
-  document.querySelectorAll(".select-input[data-setting]").forEach((input) => {
-    input.addEventListener("change", (event) => {
+  document.querySelectorAll(".choice-button[data-setting]").forEach((button) => {
+    button.addEventListener("click", (event) => {
       const key = event.currentTarget.dataset.setting;
-      const patch = toPatch(key, event.currentTarget.value, "select");
+      const value = event.currentTarget.dataset.value;
+      const patch = toPatch(key, value, "select");
       settings = mergeSettings({ ...settings, ...patch });
       scheduleApply(patch, true);
       render();

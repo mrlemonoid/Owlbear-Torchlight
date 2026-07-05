@@ -1,8 +1,8 @@
 {
   "name": "Torchlight",
-  "version": "1.7.1",
+  "version": "1.7.2",
   "manifest_version": 1,
-  "description": "Placeable torch and window lights with clearly visible style selectors, hotspot color, and beam variants.",
+  "description": "Placeable torch and window lights with multiple styles, hotspot color, and beam variants.",
   "author": "Mr.Lemonoid",
   "icon": "/icon.svg",
   "action": {
