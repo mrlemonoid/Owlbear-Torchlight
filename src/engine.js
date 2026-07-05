@@ -101,18 +101,26 @@ function markerDimensions(marker) {
   const scaleY = Math.abs(marker?.scale?.y ?? 1) || 1;
   const fallbackWidth = settings.sourceType === "beam" ? settings.beamWidth : settings.radius * 2;
   const fallbackHeight = settings.sourceType === "beam" ? settings.beamLength : settings.radius * 2;
-  const width = Math.max(20, Number(marker?.width ?? fallbackWidth) * scaleX);
-  const height = Math.max(20, Number(marker?.height ?? fallbackHeight) * scaleY);
+  const baseWidth = Math.max(20, Number(marker?.width ?? fallbackWidth));
+  const baseHeight = Math.max(20, Number(marker?.height ?? fallbackHeight));
+  const width = baseWidth * scaleX;
+  const height = baseHeight * scaleY;
   const radius = Math.max(width, height) / 2;
-  return { width, height, radius };
+  return { baseWidth, baseHeight, width, height, radius, scaleX, scaleY };
 }
 
-function effectPositionFromMarker(marker, width, height) {
-  const center = marker?.position ?? { x: 0, y: 0 };
-  return {
-    x: center.x - width / 2,
-    y: center.y - height / 2,
-  };
+const markerBoundsCache = new Map();
+
+function markerCenter(marker) {
+  return markerBoundsCache.get(marker.id)?.center ?? marker?.position ?? { x: 0, y: 0 };
+}
+
+
+function effectPositionFromMarker(marker) {
+  // Standalone effects use the same item transform fields as shapes:
+  // position, rotation, scale, width and height.
+  // Do not derive a top-left from the bounds center; that breaks as soon as the marker is rotated.
+  return { ...(marker?.position ?? { x: 0, y: 0 }) };
 }
 
 function flickerValue(marker, now = Date.now()) {
@@ -171,66 +179,22 @@ function makeBeamUniforms(marker, now = Date.now()) {
   ];
 }
 
-function beamOpacity(marker, now = Date.now()) {
-  const settings = getMarkerSettings(marker);
-  const flicker = flickerValue(marker, now);
-  return clamp(settings.intensity * flicker * 0.30, 0.02, 0.52);
-}
-
 function buildLocalGlow(marker, now = Date.now()) {
   const type = markerSourceType(marker);
-  const { width, height } = markerDimensions(marker);
-  const flicker = flickerValue(marker, now);
-
-  if (type === "beam") {
-    const settings = getMarkerSettings(marker);
-    const shape = buildShape()
-      .name(`Door/Window Light Glow - ${marker.name ?? "Light"}`)
-      .shapeType("RECTANGLE")
-      .width(width)
-      .height(height)
-      .position(marker.position)
-      .rotation(marker.rotation ?? 0)
-      .layer("PROP")
-      .zIndex(999998)
-      .style({
-        fillColor: colorToHex(settings.color),
-        fillOpacity: beamOpacity(marker, now),
-        strokeColor: colorToHex(settings.color),
-        strokeOpacity: 0,
-        strokeWidth: 0,
-        strokeDash: [],
-      })
-      .locked(true)
-      .disableHit(true)
-      .build();
-
-    shape.metadata = {
-      ...(shape.metadata ?? {}),
-      [LOCAL_KEY]: {
-        kind: "glow",
-        targetId: marker.id,
-        sourceType: "beam",
-      },
-    };
-
-    return shape;
-  }
-
-  const effectWidth = width * (1 + (flicker - 1) * 0.06);
-  const effectHeight = height * (1 + (flicker - 1) * 0.06);
+  const { baseWidth, baseHeight } = markerDimensions(marker);
 
   const effect = buildEffect()
-    .name(`Flickering Light Glow - ${marker.name ?? "Light"}`)
+    .name(`${type === "beam" ? "Door/Window Light" : "Flickering Light"} Glow - ${marker.name ?? "Light"}`)
     .effectType("STANDALONE")
-    .width(effectWidth)
-    .height(effectHeight)
-    .position(effectPositionFromMarker(marker, effectWidth, effectHeight))
-    .rotation(0)
+    .width(baseWidth)
+    .height(baseHeight)
+    .position(effectPositionFromMarker(marker))
+    .rotation(marker.rotation ?? 0)
+    .scale({ ...(marker.scale ?? { x: 1, y: 1 }) })
     .layer("PROP")
     .zIndex(999998)
-    .sksl(GLOW_SKSL)
-    .uniforms(makeTorchUniforms(marker, now))
+    .sksl(type === "beam" ? BEAM_SKSL : GLOW_SKSL)
+    .uniforms(type === "beam" ? makeBeamUniforms(marker, now) : makeTorchUniforms(marker, now))
     .blendMode("SCREEN")
     .locked(true)
     .disableHit(true)
@@ -241,7 +205,6 @@ function buildLocalGlow(marker, now = Date.now()) {
     [LOCAL_KEY]: {
       kind: "glow",
       targetId: marker.id,
-      sourceType: "torch",
     },
   };
 
@@ -254,7 +217,7 @@ function buildLocalLight(marker, now = Date.now()) {
   const flicker = flickerValue(marker, now);
   const light = buildLight()
     .name(`Flickering Light Fog - ${marker.name ?? "Torch"}`)
-    .position(marker.position)
+    .position(markerCenter(marker))
     .rotation(marker.rotation ?? 0)
     .sourceRadius(Math.max(1, settings.sourceRadius * flicker))
     .attenuationRadius(Math.max(20, radius * flicker))
@@ -281,57 +244,32 @@ function updateLocalDraft(item, marker, now = Date.now()) {
   const settings = getMarkerSettings(marker);
   const type = markerSourceType(marker);
   const kind = localKind(item);
-  const { width, height, radius } = markerDimensions(marker);
+  const { baseWidth, baseHeight, width, height, radius } = markerDimensions(marker);
   const flicker = flickerValue(marker, now);
 
   item.visible = marker.visible !== false;
-  item.position = { ...(marker.position ?? { x: 0, y: 0 }) };
-  item.rotation = marker.rotation ?? 0;
   item.locked = true;
   item.disableHit = true;
-  item.zIndex = 999999;
 
-  if (kind === "glow" && type === "beam" && isShape(item)) {
-    const settings = getMarkerSettings(marker);
-    item.name = `Door/Window Light Glow - ${marker.name ?? "Light"}`;
+  if (kind === "glow" && isEffect(item)) {
+    item.name = `${type === "beam" ? "Door/Window Light" : "Flickering Light"} Glow - ${marker.name ?? "Light"}`;
     item.layer = "PROP";
-    item.zIndex = 999998;
-    item.width = width;
-    item.height = height;
-    item.position = { ...(marker.position ?? { x: 0, y: 0 }) };
-    item.rotation = marker.rotation ?? 0;
-    item.scale = { x: 1, y: 1 };
-    item.shapeType = "RECTANGLE";
-    item.style = {
-      fillColor: colorToHex(settings.color),
-      fillOpacity: beamOpacity(marker, now),
-      strokeColor: colorToHex(settings.color),
-      strokeOpacity: 0,
-      strokeWidth: 0,
-      strokeDash: [],
-    };
-  }
-
-  if (kind === "glow" && type === "torch" && isEffect(item)) {
-    const wobble = 1 + (flicker - 1) * 0.06;
-    item.name = `Flickering Light Glow - ${marker.name ?? "Light"}`;
     item.effectType = "STANDALONE";
     item.attachedTo = undefined;
     item.disableAttachmentBehavior = undefined;
-    item.layer = "PROP";
     item.zIndex = 999998;
-    item.width = width * wobble;
-    item.height = height * wobble;
-    item.position = effectPositionFromMarker(marker, item.width, item.height);
-    item.rotation = 0;
-    item.scale = { x: 1, y: 1 };
-    item.sksl = GLOW_SKSL;
+    item.width = baseWidth;
+    item.height = baseHeight;
+    item.position = effectPositionFromMarker(marker);
+    item.rotation = marker.rotation ?? 0;
+    item.scale = { ...(marker.scale ?? { x: 1, y: 1 }) };
+    item.sksl = type === "beam" ? BEAM_SKSL : GLOW_SKSL;
     item.blendMode = "SCREEN";
-    item.uniforms = makeTorchUniforms(marker, now);
+    item.uniforms = type === "beam" ? makeBeamUniforms(marker, now) : makeTorchUniforms(marker, now);
   }
 
   if (kind === "light" && isLight(item)) {
-    item.position = { ...(marker.position ?? { x: 0, y: 0 }) };
+    item.position = { ...markerCenter(marker) };
     item.name = `Flickering Light Fog - ${marker.name ?? "Torch"}`;
     item.layer = "FOG";
     item.lightType = "PRIMARY";
@@ -397,6 +335,16 @@ export async function syncLocalLights() {
   ]);
 
   const activeMarkers = markers.filter((marker) => marker.visible !== false);
+
+  markerBoundsCache.clear();
+  for (const marker of activeMarkers) {
+    try {
+      markerBoundsCache.set(marker.id, await OBR.scene.items.getItemBounds([marker.id]));
+    } catch (error) {
+      console.warn("Torchlight: could not read marker bounds", error);
+    }
+  }
+
   const markerIds = new Set(activeMarkers.map((marker) => marker.id));
   const existing = mapLocalItems(localItems);
   const obsoleteIds = [];
@@ -431,15 +379,13 @@ export async function syncLocalLights() {
     if (type === "torch" && settings.fogLight) await upsertLocal(light, buildLocalLight, marker, now);
     else await safeDeleteItems([light?.id]);
 
-    const wrongGlowType =
-      glow &&
-      ((type === "beam" && !isShape(glow)) || (type === "torch" && !isEffect(glow)));
-
-    if (wrongGlowType) {
-      await safeDeleteItems([glow.id]);
-      await safeAddItem(buildLocalGlow(marker, now));
-    } else if (settings.visualGlow) {
-      await upsertLocal(glow, buildLocalGlow, marker, now);
+    if (settings.visualGlow) {
+      if (glow && !isEffect(glow)) {
+        await safeDeleteItems([glow.id]);
+        await safeAddItem(buildLocalGlow(marker, now));
+      } else {
+        await upsertLocal(glow, buildLocalGlow, marker, now);
+      }
     } else {
       await safeDeleteItems([glow?.id]);
     }

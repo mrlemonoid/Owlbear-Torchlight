@@ -1,8 +1,8 @@
 {
   "name": "Torchlight",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "manifest_version": 1,
-  "description": "Placeable flickering torchlights and door/window beam lights with stable transforms.",
+  "description": "Placeable flickering torchlights and door/window beam lights with exact transform-cloned glow effects.",
   "author": "Mr.Lemonoid",
   "icon": "/icon.svg",
   "action": {
