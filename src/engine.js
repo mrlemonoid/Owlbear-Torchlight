@@ -101,20 +101,20 @@ function markerDimensions(marker) {
   const scaleY = Math.abs(marker?.scale?.y ?? 1) || 1;
   const fallbackWidth = settings.sourceType === "beam" ? settings.beamWidth : settings.radius * 2;
   const fallbackHeight = settings.sourceType === "beam" ? settings.beamLength : settings.radius * 2;
-  const width = Math.max(20, Number(marker?.width ?? fallbackWidth) * scaleX);
-  const height = Math.max(20, Number(marker?.height ?? fallbackHeight) * scaleY);
+  const baseWidth = Math.max(20, Number(marker?.width ?? fallbackWidth));
+  const baseHeight = Math.max(20, Number(marker?.height ?? fallbackHeight));
+  const width = baseWidth * scaleX;
+  const height = baseHeight * scaleY;
   const radius = Math.max(width, height) / 2;
-  return { width, height, radius };
+  return { baseWidth, baseHeight, width, height, radius, scaleX, scaleY };
 }
 
-function attachedEffectBase(builder, marker) {
-  return builder
-    .effectType("ATTACHMENT")
-    .attachedTo(marker.id)
-    .disableAttachmentBehavior(["VISIBLE"])
-    .position({ x: 0, y: 0 })
-    .rotation(0)
-    .scale({ x: 1, y: 1 });
+function effectPositionFromMarker(marker, width, height) {
+  const center = marker?.position ?? { x: 0, y: 0 };
+  return {
+    x: center.x - width / 2,
+    y: center.y - height / 2,
+  };
 }
 
 function flickerValue(marker, now = Date.now()) {
@@ -175,13 +175,18 @@ function makeBeamUniforms(marker, now = Date.now()) {
 
 function buildLocalGlow(marker, now = Date.now()) {
   const type = markerSourceType(marker);
-  const { width, height } = markerDimensions(marker);
+  const { baseWidth, baseHeight } = markerDimensions(marker);
 
-  const effect = attachedEffectBase(buildEffect(), marker)
+  const effect = buildEffect()
     .name(`${type === "beam" ? "Door/Window Light" : "Flickering Light"} Glow - ${marker.name ?? "Light"}`)
-    .width(width)
-    .height(height)
-    .layer("ATTACHMENT")
+    .effectType("ATTACHMENT")
+    .attachedTo(marker.id)
+    .width(baseWidth)
+    .height(baseHeight)
+    .position({ x: 0, y: 0 })
+    .rotation(0)
+    .scale({ x: 1, y: 1 })
+    .layer("PROP")
     .zIndex(999998)
     .sksl(type === "beam" ? BEAM_SKSL : GLOW_SKSL)
     .uniforms(type === "beam" ? makeBeamUniforms(marker, now) : makeTorchUniforms(marker, now))
@@ -195,6 +200,7 @@ function buildLocalGlow(marker, now = Date.now()) {
     [LOCAL_KEY]: {
       kind: "glow",
       targetId: marker.id,
+      renderMode: "attached-prop-effect",
     },
   };
 
@@ -234,7 +240,7 @@ function updateLocalDraft(item, marker, now = Date.now()) {
   const settings = getMarkerSettings(marker);
   const type = markerSourceType(marker);
   const kind = localKind(item);
-  const { width, height, radius } = markerDimensions(marker);
+  const { baseWidth, baseHeight, width, height, radius } = markerDimensions(marker);
   const flicker = flickerValue(marker, now);
 
   item.visible = marker.visible !== false;
@@ -245,17 +251,24 @@ function updateLocalDraft(item, marker, now = Date.now()) {
     item.name = `${type === "beam" ? "Door/Window Light" : "Flickering Light"} Glow - ${marker.name ?? "Light"}`;
     item.effectType = "ATTACHMENT";
     item.attachedTo = marker.id;
-    item.disableAttachmentBehavior = ["VISIBLE"];
-    item.layer = "ATTACHMENT";
+    item.layer = "PROP";
     item.zIndex = 999998;
-    item.width = width;
-    item.height = height;
+    item.width = baseWidth;
+    item.height = baseHeight;
     item.position = { x: 0, y: 0 };
     item.rotation = 0;
     item.scale = { x: 1, y: 1 };
+    delete item.disableAttachmentBehavior;
     item.sksl = type === "beam" ? BEAM_SKSL : GLOW_SKSL;
     item.blendMode = "SCREEN";
     item.uniforms = type === "beam" ? makeBeamUniforms(marker, now) : makeTorchUniforms(marker, now);
+    item.metadata = item.metadata ?? {};
+    item.metadata[LOCAL_KEY] = {
+      ...(item.metadata[LOCAL_KEY] ?? {}),
+      kind: "glow",
+      targetId: marker.id,
+      renderMode: "attached-prop-effect",
+    };
   }
 
   if (kind === "light" && isLight(item)) {
@@ -359,8 +372,23 @@ export async function syncLocalLights() {
     if (type === "torch" && settings.fogLight) await upsertLocal(light, buildLocalLight, marker, now);
     else await safeDeleteItems([light?.id]);
 
-    if (settings.visualGlow) await upsertLocal(glow, buildLocalGlow, marker, now);
-    else await safeDeleteItems([glow?.id]);
+    const staleGlow =
+      glow &&
+      (!isEffect(glow) ||
+        glow.effectType !== "ATTACHMENT" ||
+        glow.attachedTo !== marker.id ||
+        glow.layer !== "PROP");
+
+    if (settings.visualGlow) {
+      if (staleGlow) {
+        await safeDeleteItems([glow.id]);
+        await safeAddItem(buildLocalGlow(marker, now));
+      } else {
+        await upsertLocal(glow, buildLocalGlow, marker, now);
+      }
+    } else {
+      await safeDeleteItems([glow?.id]);
+    }
   }
 }
 
