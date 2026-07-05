@@ -49,7 +49,7 @@ export const DEFAULT_BEAM_SETTINGS = {
   visualGlow: true,
   fogLight: false,
   color: { x: 1.0, y: 0.72, z: 0.34 },
-  hotspotColor: { x: 1.0, y: 0.94, z: 0.78 },
+  hotspotColor: { x: 1.0, y: 0.72, z: 0.34 },
   beamBars: 5,
 };
 

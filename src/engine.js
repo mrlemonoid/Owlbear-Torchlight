@@ -58,13 +58,13 @@ half4 main(float2 coord) {
   } else if (styleIndex > 1.5 && styleIndex < 2.5) {
     float bars = max(2.0, floor(barCount + 0.5));
     float spokeWave = 0.5 + 0.5 * cos(angle * bars);
-    float spokeMask = smoothstep(0.938, 0.988, spokeWave);
+    float spokeMask = smoothstep(0.928, 0.984, spokeWave);
     float ringWave = 0.5 + 0.5 * cos((d - 0.20) * 15.0);
-    float ringMask = smoothstep(0.950, 0.990, ringWave) * smoothstep(0.32, 0.94, d);
-    float cage = clamp(spokeMask * 0.54 + ringMask * 0.26, 0.0, 1.0);
-    float cageFade = smoothstep(0.34, 0.88, d);
-    alpha *= 1.0 - cage * 0.18 * cageFade;
-    finalColor = mix(finalColor, color, cage * 0.10 * cageFade);
+    float ringMask = smoothstep(0.944, 0.986, ringWave) * smoothstep(0.26, 0.94, d);
+    float cage = clamp(spokeMask * 0.62 + ringMask * 0.30, 0.0, 1.0);
+    float cageFade = smoothstep(0.18, 0.90, d);
+    alpha *= 1.0 - cage * 0.24 * cageFade;
+    finalColor = mix(finalColor, color, cage * 0.14 * cageFade);
   } else if (styleIndex > 2.5) {
     float lobe = 0.88 + irregularity * 0.28 * sin(angle * 5.0 + flicker * 3.0 + dBase * 8.0);
     alpha *= lobe;
@@ -99,31 +99,31 @@ half4 main(float2 coord) {
   float xAbs = abs(x) * 2.0;
 
   float widthFactor = clamp(spread, 0.05, 1.0);
-  float startSpread = mix(0.12, 0.28, pow(widthFactor, 0.85));
-  float endSpread = min(1.12, startSpread + mix(0.28, 0.82, sqrt(widthFactor)));
-  float taper = mix(startSpread, endSpread, smoothstep(0.0, 1.0, y));
-  float edge = 1.0 - smoothstep(taper * 0.84, taper, xAbs);
-  float startFade = smoothstep(0.00, 0.018, y);
+  float startSpread = mix(0.14, 0.26, pow(widthFactor, 0.85));
+  float endSpread = mix(max(startSpread + 0.16, 0.42), 1.0, sqrt(widthFactor));
+  float taper = mix(startSpread, endSpread, y);
+  float edge = 1.0 - smoothstep(taper * 0.90, taper, xAbs);
+  float startFade = smoothstep(0.00, 0.012, y);
   float endFade = 1.0 - smoothstep(0.70, 1.0, y);
   float sideFeather = 1.0 - smoothstep(0.84, 1.0, xAbs);
-  float textureA = 0.88 + 0.12 * sin((uv.x * 10.0) + (uv.y * 2.5));
-  float textureB = 0.92 + 0.08 * sin((uv.x * 17.0) - (uv.y * 5.0));
-  float breakup = 1.0 - irregularity * 0.28 * (0.5 + 0.5 * sin(uv.y * 18.0 + uv.x * 6.0));
+  float textureA = 0.92 + 0.08 * sin((uv.x * 8.0) + (uv.y * 1.8));
+  float textureB = 0.95 + 0.05 * sin((uv.x * 14.0) - (uv.y * 3.2));
+  float breakup = 1.0 - irregularity * 0.18 * (0.5 + 0.5 * sin(uv.y * 14.0 + uv.x * 4.0));
 
   float alpha = edge * startFade * endFade * sideFeather * textureA * textureB * breakup * intensity * flicker;
   float normalizedX = (x / max(0.04, taper)) * 0.5 + 0.5;
   float styleShadow = 1.0;
 
-  float shadowFade = 0.45 + 0.55 * smoothstep(0.0, 0.06, y);
+  float shadowFade = 0.50 + 0.50 * smoothstep(0.0, 0.04, y);
   if (styleIndex > 0.5 && styleIndex < 1.5) {
-    float bars = stripeMask(normalizedX, max(2.0, floor(barCount + 0.5)) * 3.14159, 0.36);
-    styleShadow = 1.0 - bars * 0.15 * shadowFade;
+    float bars = stripeMask(normalizedX, max(2.0, floor(barCount + 0.5)) * 3.14159, 0.30);
+    styleShadow = 1.0 - bars * 0.16 * shadowFade;
   } else if (styleIndex > 1.5 && styleIndex < 2.5) {
-    float bars = stripeMask(normalizedX, max(2.0, floor(barCount + 0.5)) * 3.14159, 0.38);
-    float grate = stripeMask(y, 8.0 + barCount * 0.8, 0.34) * smoothstep(0.00, 0.10, y);
-    styleShadow = 1.0 - clamp((bars * 0.11 + grate * 0.04) * shadowFade, 0.0, 0.20);
+    float bars = stripeMask(normalizedX, max(2.0, floor(barCount + 0.5)) * 3.14159, 0.32);
+    float grate = stripeMask(y, 8.0 + barCount * 0.8, 0.32) * smoothstep(0.00, 0.08, y);
+    styleShadow = 1.0 - clamp((bars * 0.10 + grate * 0.035) * shadowFade, 0.0, 0.18);
   } else if (styleIndex > 2.5) {
-    float bars = stripeMask(normalizedX, max(2.0, floor(barCount + 0.5)) * 3.14159, 0.40);
+    float bars = stripeMask(normalizedX, max(2.0, floor(barCount + 0.5)) * 3.14159, 0.34);
     styleShadow = 1.0 - bars * 0.18 * shadowFade;
   }
 
@@ -647,8 +647,8 @@ export async function createDoorWindowLight(settings = {}) {
   const marker = buildShape()
     .name("Window / Beam Light Source")
     .shapeType("CIRCLE")
-    .width(96)
-    .height(96)
+    .width(160)
+    .height(160)
     .position(position)
     .layer("PROP")
     .zIndex(999999)
@@ -693,8 +693,8 @@ export async function applySettingsToSelected(settingsPatch = {}) {
 
       if (settings.sourceType === "beam") {
         item.shapeType = "CIRCLE";
-        item.width = 96;
-        item.height = 96;
+        item.width = 160;
+        item.height = 160;
         item.scale = { x: 1, y: 1 };
       }
 
