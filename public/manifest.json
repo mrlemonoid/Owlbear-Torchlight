@@ -1,8 +1,8 @@
 {
   "name": "Torchlight",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "manifest_version": 1,
-  "description": "Placeable flickering torchlights and door/window beam lights with centered attachment glow.",
+  "description": "Placeable flickering torchlights and door/window beam lights with stable standalone glow positioning.",
   "author": "Mr.Lemonoid",
   "icon": "/icon.svg",
   "action": {

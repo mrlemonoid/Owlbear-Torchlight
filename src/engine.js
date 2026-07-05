@@ -107,24 +107,19 @@ function markerDimensions(marker) {
   return { width, height, radius };
 }
 
-function attachmentPositionForEffect(width, height) {
-  // Effect items draw from their own top-left origin.
-  // The parent marker origin is the shape center, so the local attachment offset must be
-  // negative half-size to put the glow's visual center on the marker center.
-  return {
-    x: -width / 2,
-    y: -height / 2,
-  };
+const markerBoundsCache = new Map();
+
+function markerCenter(marker) {
+  return markerBoundsCache.get(marker.id)?.center ?? marker?.position ?? { x: 0, y: 0 };
 }
 
-function attachedEffectBase(builder, marker, width, height) {
-  return builder
-    .effectType("ATTACHMENT")
-    .attachedTo(marker.id)
-    .disableAttachmentBehavior(["VISIBLE"])
-    .position(attachmentPositionForEffect(width, height))
-    .rotation(0)
-    .scale({ x: 1, y: 1 });
+
+function effectPositionFromMarker(marker, width, height) {
+  const center = markerCenter(marker);
+  return {
+    x: center.x - width / 2,
+    y: center.y - height / 2,
+  };
 }
 
 function flickerValue(marker, now = Date.now()) {
@@ -186,12 +181,19 @@ function makeBeamUniforms(marker, now = Date.now()) {
 function buildLocalGlow(marker, now = Date.now()) {
   const type = markerSourceType(marker);
   const { width, height } = markerDimensions(marker);
+  const flicker = flickerValue(marker, now);
+  const wobble = type === "torch" ? (1 + (flicker - 1) * 0.06) : 1;
+  const effectWidth = width * wobble;
+  const effectHeight = height * wobble;
 
-  const effect = attachedEffectBase(buildEffect(), marker, width, height)
+  const effect = buildEffect()
     .name(`${type === "beam" ? "Door/Window Light" : "Flickering Light"} Glow - ${marker.name ?? "Light"}`)
-    .width(width)
-    .height(height)
-    .layer("ATTACHMENT")
+    .effectType("STANDALONE")
+    .width(effectWidth)
+    .height(effectHeight)
+    .position(effectPositionFromMarker(marker, effectWidth, effectHeight))
+    .rotation(marker.rotation ?? 0)
+    .layer("PROP")
     .zIndex(999998)
     .sksl(type === "beam" ? BEAM_SKSL : GLOW_SKSL)
     .uniforms(type === "beam" ? makeBeamUniforms(marker, now) : makeTorchUniforms(marker, now))
@@ -217,7 +219,7 @@ function buildLocalLight(marker, now = Date.now()) {
   const flicker = flickerValue(marker, now);
   const light = buildLight()
     .name(`Flickering Light Fog - ${marker.name ?? "Torch"}`)
-    .position(marker.position)
+    .position(markerCenter(marker))
     .rotation(marker.rotation ?? 0)
     .sourceRadius(Math.max(1, settings.sourceRadius * flicker))
     .attenuationRadius(Math.max(20, radius * flicker))
@@ -252,16 +254,17 @@ function updateLocalDraft(item, marker, now = Date.now()) {
   item.disableHit = true;
 
   if (kind === "glow" && isEffect(item)) {
+    const wobble = type === "torch" ? (1 + (flicker - 1) * 0.06) : 1;
     item.name = `${type === "beam" ? "Door/Window Light" : "Flickering Light"} Glow - ${marker.name ?? "Light"}`;
-    item.effectType = "ATTACHMENT";
-    item.attachedTo = marker.id;
-    item.disableAttachmentBehavior = ["VISIBLE"];
-    item.layer = "ATTACHMENT";
+    item.effectType = "STANDALONE";
+    item.attachedTo = undefined;
+    item.disableAttachmentBehavior = undefined;
+    item.layer = "PROP";
     item.zIndex = 999998;
-    item.width = width;
-    item.height = height;
-    item.position = attachmentPositionForEffect(width, height);
-    item.rotation = 0;
+    item.width = width * wobble;
+    item.height = height * wobble;
+    item.position = effectPositionFromMarker(marker, item.width, item.height);
+    item.rotation = marker.rotation ?? 0;
     item.scale = { x: 1, y: 1 };
     item.sksl = type === "beam" ? BEAM_SKSL : GLOW_SKSL;
     item.blendMode = "SCREEN";
@@ -269,7 +272,7 @@ function updateLocalDraft(item, marker, now = Date.now()) {
   }
 
   if (kind === "light" && isLight(item)) {
-    item.position = { ...(marker.position ?? { x: 0, y: 0 }) };
+    item.position = { ...markerCenter(marker) };
     item.name = `Flickering Light Fog - ${marker.name ?? "Torch"}`;
     item.layer = "FOG";
     item.lightType = "PRIMARY";
@@ -335,6 +338,16 @@ export async function syncLocalLights() {
   ]);
 
   const activeMarkers = markers.filter((marker) => marker.visible !== false);
+
+  markerBoundsCache.clear();
+  for (const marker of activeMarkers) {
+    try {
+      markerBoundsCache.set(marker.id, await OBR.scene.items.getItemBounds([marker.id]));
+    } catch (error) {
+      console.warn("Torchlight: could not read marker bounds", error);
+    }
+  }
+
   const markerIds = new Set(activeMarkers.map((marker) => marker.id));
   const existing = mapLocalItems(localItems);
   const obsoleteIds = [];
