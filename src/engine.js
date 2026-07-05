@@ -3,7 +3,6 @@ import {
   DEFAULT_BEAM_SETTINGS,
   DEFAULT_SETTINGS,
   DEFAULT_TORCH_SETTINGS,
-  ANCHOR_KEY,
   LOCAL_KEY,
   MARKER_KEY,
   getMarkerSettings,
@@ -75,169 +74,6 @@ half4 main(float2 coord) {
 }
 `;
 
-
-function isDoorWindowAnchor(item) {
-  return Boolean(isShape(item) && item?.metadata?.[ANCHOR_KEY]?.kind === "door-window-anchor");
-}
-
-function anchorParentId(item) {
-  return item?.metadata?.[ANCHOR_KEY]?.parentId;
-}
-
-function anchorStyle(settings) {
-  return {
-    fillColor: colorToHex(settings.color),
-    fillOpacity: Math.max(0.04, settings.markerOpacity * 0.16),
-    strokeColor: colorToHex(settings.color),
-    strokeOpacity: Math.max(0.28, settings.markerOpacity),
-    strokeWidth: 3,
-    strokeDash: [4, 4],
-  };
-}
-
-async function beamCenter(marker) {
-  try {
-    return (await OBR.scene.items.getItemBounds([marker.id])).center ?? marker.position;
-  } catch {
-    return marker?.position ?? { x: 0, y: 0 };
-  }
-}
-
-function needsVectorUpdate(a = {}, b = {}, eps = 0.5) {
-  return Math.abs((a.x ?? 0) - (b.x ?? 0)) > eps || Math.abs((a.y ?? 0) - (b.y ?? 0)) > eps;
-}
-
-function needsStyleUpdate(current = {}, next = {}) {
-  return (
-    current.fillColor !== next.fillColor ||
-    Math.abs((current.fillOpacity ?? 0) - (next.fillOpacity ?? 0)) > 0.005 ||
-    current.strokeColor !== next.strokeColor ||
-    Math.abs((current.strokeOpacity ?? 0) - (next.strokeOpacity ?? 0)) > 0.005 ||
-    current.strokeWidth !== next.strokeWidth
-  );
-}
-
-function buildDoorWindowAnchor(marker, center) {
-  const settings = getMarkerSettings(marker);
-  const anchor = buildShape()
-    .name(`S&S Torch Anchor - ${marker.name ?? "Door / Window Light"}`)
-    .shapeType("CIRCLE")
-    .width(24)
-    .height(24)
-    .position(center)
-    .layer("PROP")
-    .zIndex(1000000)
-    .style(anchorStyle(settings))
-    .locked(false)
-    .disableHit(false)
-    .metadata({
-      [ANCHOR_KEY]: {
-        kind: "door-window-anchor",
-        parentId: marker.id,
-      },
-    })
-    .build();
-
-  return anchor;
-}
-
-async function syncDoorWindowAnchors(activeMarkers) {
-  const beams = activeMarkers.filter((marker) => markerSourceType(marker) === "beam");
-  const beamIds = new Set(beams.map((marker) => marker.id));
-  const anchors = await OBR.scene.items.getItems(isDoorWindowAnchor);
-  const anchorsByParent = new Map();
-  const deleteIds = [];
-
-  for (const anchor of anchors) {
-    const parentId = anchorParentId(anchor);
-    if (!parentId || !beamIds.has(parentId)) {
-      deleteIds.push(anchor.id);
-      continue;
-    }
-
-    if (anchorsByParent.has(parentId)) {
-      deleteIds.push(anchor.id);
-      continue;
-    }
-
-    anchorsByParent.set(parentId, anchor);
-  }
-
-  if (deleteIds.length) {
-    await OBR.scene.items.deleteItems(deleteIds);
-  }
-
-  const toAdd = [];
-  const updateIds = [];
-  const updateData = new Map();
-
-  for (const beam of beams) {
-    const center = await beamCenter(beam);
-    const settings = getMarkerSettings(beam);
-    const nextStyle = anchorStyle(settings);
-    const anchor = anchorsByParent.get(beam.id);
-
-    if (!anchor) {
-      toAdd.push(buildDoorWindowAnchor(beam, center));
-      continue;
-    }
-
-    const changed =
-      needsVectorUpdate(anchor.position, center) ||
-      anchor.visible !== beam.visible ||
-      anchor.layer !== "PROP" ||
-      anchor.locked !== false ||
-      anchor.disableHit !== false ||
-      anchor.width !== 24 ||
-      anchor.height !== 24 ||
-      anchor.shapeType !== "CIRCLE" ||
-      needsStyleUpdate(anchor.style, nextStyle);
-
-    if (changed) {
-      updateIds.push(anchor.id);
-      updateData.set(anchor.id, {
-        center,
-        visible: beam.visible !== false,
-        style: nextStyle,
-        name: `S&S Torch Anchor - ${beam.name ?? "Door / Window Light"}`,
-      });
-    }
-  }
-
-  if (updateIds.length) {
-    await OBR.scene.items.updateItems(updateIds, (items) => {
-      for (const item of items) {
-        const data = updateData.get(item.id);
-        if (!data) continue;
-
-        item.name = data.name;
-        item.shapeType = "CIRCLE";
-        item.width = 24;
-        item.height = 24;
-        item.position = data.center;
-        item.rotation = 0;
-        item.scale = { x: 1, y: 1 };
-        item.layer = "PROP";
-        item.zIndex = 1000000;
-        item.visible = data.visible;
-        item.locked = false;
-        item.disableHit = false;
-        item.style = data.style;
-        item.metadata = item.metadata ?? {};
-        item.metadata[ANCHOR_KEY] = {
-          ...(item.metadata[ANCHOR_KEY] ?? {}),
-          kind: "door-window-anchor",
-          parentId: item.metadata?.[ANCHOR_KEY]?.parentId,
-        };
-      }
-    });
-  }
-
-  if (toAdd.length) {
-    await OBR.scene.items.addItems(toAdd);
-  }
-}
-
 export function isFlickerMarker(item) {
   const kind = item?.metadata?.[MARKER_KEY]?.kind;
   return Boolean(isShape(item) && (kind === "flickering-light" || kind === "door-window-light"));
@@ -261,10 +97,25 @@ function targetId(item) {
 
 function markerDimensions(marker) {
   const settings = getMarkerSettings(marker);
+
+  if (settings.sourceType === "beam") {
+    const baseWidth = Math.max(20, Number(settings.beamWidth ?? 190));
+    const baseHeight = Math.max(20, Number(settings.beamLength ?? 420));
+    return {
+      baseWidth,
+      baseHeight,
+      width: baseWidth,
+      height: baseHeight,
+      radius: Math.max(baseWidth, baseHeight) / 2,
+      scaleX: 1,
+      scaleY: 1,
+    };
+  }
+
   const scaleX = Math.abs(marker?.scale?.x ?? 1) || 1;
   const scaleY = Math.abs(marker?.scale?.y ?? 1) || 1;
-  const fallbackWidth = settings.sourceType === "beam" ? settings.beamWidth : settings.radius * 2;
-  const fallbackHeight = settings.sourceType === "beam" ? settings.beamLength : settings.radius * 2;
+  const fallbackWidth = settings.radius * 2;
+  const fallbackHeight = settings.radius * 2;
   const baseWidth = Math.max(20, Number(marker?.width ?? fallbackWidth));
   const baseHeight = Math.max(20, Number(marker?.height ?? fallbackHeight));
   const width = baseWidth * scaleX;
@@ -278,6 +129,30 @@ function effectPositionFromMarker(marker, width, height) {
   return {
     x: center.x - width / 2,
     y: center.y - height / 2,
+  };
+}
+
+function rotatePoint(point, degrees) {
+  const radians = Number(degrees ?? 0) * Math.PI / 180;
+  const cos = Math.cos(radians);
+  const sin = Math.sin(radians);
+  return {
+    x: point.x * cos - point.y * sin,
+    y: point.x * sin + point.y * cos,
+  };
+}
+
+function beamGlowPosition(marker, width, height) {
+  const source = marker?.position ?? { x: 0, y: 0 };
+
+  // The beam shader starts at local top-center: (width / 2, 0).
+  // The standalone effect position is its top-left origin.
+  // So: topLeft = source - rotate(width / 2, 0)
+  const topCenterOffset = rotatePoint({ x: width / 2, y: 0 }, marker.rotation ?? 0);
+
+  return {
+    x: source.x - topCenterOffset.x,
+    y: source.y - topCenterOffset.y,
   };
 }
 
@@ -352,12 +227,11 @@ function buildLocalGlow(marker, now = Date.now()) {
   if (type === "beam") {
     const effect = buildEffect()
       .name(`Door/Window Light Glow - ${marker.name ?? "Light"}`)
-      .effectType("ATTACHMENT")
-      .attachedTo(marker.id)
+      .effectType("STANDALONE")
       .width(baseWidth)
       .height(baseHeight)
-      .position({ x: 0, y: 0 })
-      .rotation(0)
+      .position(beamGlowPosition(marker, baseWidth, baseHeight))
+      .rotation(marker.rotation ?? 0)
       .scale({ x: 1, y: 1 })
       .layer("PROP")
       .zIndex(999998)
@@ -374,7 +248,7 @@ function buildLocalGlow(marker, now = Date.now()) {
         kind: "glow",
         targetId: marker.id,
         sourceType: "beam",
-        renderMode: "beam-attached",
+        renderMode: "beam-source-standalone",
       },
     };
 
@@ -459,16 +333,16 @@ function updateLocalDraft(item, marker, now = Date.now()) {
   if (kind === "glow" && isEffect(item)) {
     if (type === "beam") {
       item.name = `Door/Window Light Glow - ${marker.name ?? "Light"}`;
-      item.effectType = "ATTACHMENT";
-      item.attachedTo = marker.id;
+      item.effectType = "STANDALONE";
+      item.attachedTo = undefined;
+      item.disableAttachmentBehavior = undefined;
       item.layer = "PROP";
       item.zIndex = 999998;
       item.width = baseWidth;
       item.height = baseHeight;
-      item.position = { x: 0, y: 0 };
-      item.rotation = 0;
+      item.position = beamGlowPosition(marker, baseWidth, baseHeight);
+      item.rotation = marker.rotation ?? 0;
       item.scale = { x: 1, y: 1 };
-      delete item.disableAttachmentBehavior;
       item.sksl = BEAM_SKSL;
       item.blendMode = "SCREEN";
       item.uniforms = makeBeamUniforms(marker, now);
@@ -478,7 +352,7 @@ function updateLocalDraft(item, marker, now = Date.now()) {
         kind: "glow",
         targetId: marker.id,
         sourceType: "beam",
-        renderMode: "beam-attached",
+        renderMode: "beam-source-standalone",
       };
     } else {
       const wobble = 1 + (flicker - 1) * 0.06;
@@ -576,7 +450,6 @@ export async function syncLocalLights() {
   ]);
 
   const activeMarkers = markers.filter((marker) => marker.visible !== false);
-  await syncDoorWindowAnchors(activeMarkers);
   const markerIds = new Set(activeMarkers.map((marker) => marker.id));
   const existing = mapLocalItems(localItems);
   const obsoleteIds = [];
@@ -615,9 +488,9 @@ export async function syncLocalLights() {
       glow &&
       (!isEffect(glow) ||
         (type === "beam" &&
-          (glow.effectType !== "ATTACHMENT" ||
-            glow.attachedTo !== marker.id ||
-            glow.metadata?.[LOCAL_KEY]?.renderMode !== "beam-attached")) ||
+          (glow.effectType !== "STANDALONE" ||
+            glow.attachedTo ||
+            glow.metadata?.[LOCAL_KEY]?.renderMode !== "beam-source-standalone")) ||
         (type === "torch" &&
           (glow.effectType !== "STANDALONE" ||
             glow.attachedTo ||
@@ -689,10 +562,10 @@ export async function createDoorWindowLight(settings = {}) {
   };
 
   const marker = buildShape()
-    .name("Door / Window Light")
-    .shapeType("RECTANGLE")
-    .width(merged.beamWidth)
-    .height(merged.beamLength)
+    .name("Door / Window Light Source")
+    .shapeType("CIRCLE")
+    .width(8)
+    .height(8)
     .position(position)
     .layer("PROP")
     .zIndex(999999)
@@ -735,9 +608,10 @@ export async function applySettingsToSelected(settingsPatch = {}) {
         item.scale = { x: 1, y: 1 };
       }
 
-      if (settings.sourceType === "beam" && (settingsPatch.beamLength !== undefined || settingsPatch.beamWidth !== undefined)) {
-        item.width = settings.beamWidth;
-        item.height = settings.beamLength;
+      if (settings.sourceType === "beam") {
+        item.shapeType = "CIRCLE";
+        item.width = 8;
+        item.height = 8;
         item.scale = { x: 1, y: 1 };
       }
 
@@ -756,9 +630,7 @@ export async function getSelectedFlickerMarkerIds() {
 export async function deleteSelectedFlickerMarkers() {
   const markers = await getSelectedFlickerMarkers();
   if (!markers.length) return 0;
-  const markerIds = markers.map((item) => item.id);
-  const anchors = await OBR.scene.items.getItems((item) => isDoorWindowAnchor(item) && markerIds.includes(anchorParentId(item)));
-  await OBR.scene.items.deleteItems([...markerIds, ...anchors.map((item) => item.id)]);
+  await OBR.scene.items.deleteItems(markers.map((item) => item.id));
   await syncLocalLights();
   return markers.length;
 }
