@@ -56,11 +56,15 @@ half4 main(float2 coord) {
     alpha *= 1.0 - rim * 0.12;
     finalColor = mix(finalColor, hotspotColor, 0.10 + 0.08 * bowl);
   } else if (styleIndex > 1.5 && styleIndex < 2.5) {
-    float spokes = stripeMask(angle / 6.2831853, max(3.0, barCount), 0.18);
-    float rings = stripeMask(d, 9.0 + barCount, 0.20) * smoothstep(0.08, 0.98, d);
-    float cage = clamp(spokes * 0.65 + rings * 0.55, 0.0, 1.0);
-    alpha *= 1.0 - cage * 0.26;
-    finalColor = mix(finalColor, color, cage * 0.20);
+    float bars = max(2.0, barCount);
+    float spokeWave = 0.5 + 0.5 * cos(angle * bars);
+    float spokeMask = smoothstep(0.90, 0.985, spokeWave);
+    float ringWave = 0.5 + 0.5 * cos((d - 0.18) * 16.0);
+    float ringMask = smoothstep(0.93, 0.985, ringWave) * smoothstep(0.18, 0.95, d);
+    float cage = clamp(spokeMask * 0.65 + ringMask * 0.38, 0.0, 1.0);
+    float blur = 1.0 - smoothstep(0.78, 1.0, d);
+    alpha *= 1.0 - cage * 0.20 * blur;
+    finalColor = mix(finalColor, color, cage * 0.15 * blur);
   } else if (styleIndex > 2.5) {
     float lobe = 0.88 + irregularity * 0.28 * sin(angle * 5.0 + flicker * 3.0 + dBase * 8.0);
     alpha *= lobe;
@@ -94,9 +98,11 @@ half4 main(float2 coord) {
   float x = uv.x - 0.5;
   float xAbs = abs(x) * 2.0;
 
-  float taper = mix(0.05, clamp(spread, 0.24, 1.0), y);
-  float edge = 1.0 - smoothstep(taper * 0.78, taper, xAbs);
-  float startFade = smoothstep(0.00, 0.08, y);
+  float endSpread = clamp(spread, 0.28, 1.20);
+  float startSpread = max(0.12, endSpread * 0.42);
+  float taper = mix(startSpread, endSpread, smoothstep(0.0, 1.0, y));
+  float edge = 1.0 - smoothstep(taper * 0.76, taper, xAbs);
+  float startFade = smoothstep(0.00, 0.06, y);
   float endFade = 1.0 - smoothstep(0.70, 1.0, y);
   float sideFeather = 1.0 - smoothstep(0.84, 1.0, xAbs);
   float textureA = 0.88 + 0.12 * sin((uv.x * 10.0) + (uv.y * 2.5));
@@ -107,20 +113,21 @@ half4 main(float2 coord) {
   float projectedX = x / max(0.08, y + 0.02);
   float styleShadow = 1.0;
 
+  float shadowFade = smoothstep(0.08, 0.24, y);
   if (styleIndex > 0.5 && styleIndex < 1.5) {
-    float bars = stripeMask(projectedX, max(2.0, barCount) * 0.62, 0.16);
-    styleShadow = 1.0 - bars * 0.42;
+    float bars = stripeMask(projectedX, max(2.0, barCount) * 0.62, 0.24);
+    styleShadow = 1.0 - bars * 0.28 * shadowFade;
   } else if (styleIndex > 1.5 && styleIndex < 2.5) {
-    float bars = stripeMask(projectedX, max(2.0, barCount) * 0.68, 0.16);
-    float grate = stripeMask(y, 10.0 + barCount, 0.17) * smoothstep(0.02, 0.24, y);
-    styleShadow = 1.0 - clamp(bars * 0.36 + grate * 0.20, 0.0, 0.72);
+    float bars = stripeMask(projectedX, max(2.0, barCount) * 0.68, 0.25);
+    float grate = stripeMask(y, 10.0 + barCount, 0.22) * smoothstep(0.05, 0.28, y);
+    styleShadow = 1.0 - clamp((bars * 0.24 + grate * 0.12) * shadowFade, 0.0, 0.48);
   } else if (styleIndex > 2.5) {
-    float bars = stripeMask(projectedX, max(2.0, barCount) * 0.92, 0.18);
-    styleShadow = 1.0 - bars * 0.56;
+    float bars = stripeMask(projectedX, max(2.0, barCount) * 0.92, 0.26);
+    styleShadow = 1.0 - bars * 0.34 * shadowFade;
   }
 
   alpha *= styleShadow;
-  alpha = clamp(alpha * 0.60, 0.0, 0.80);
+  alpha = clamp(alpha * 0.62, 0.0, 0.82);
   float centerGlow = 1.0 - smoothstep(0.0, 0.38, xAbs / max(0.08, taper));
   vec3 warm = mix(color, hotspotColor, clamp(centerGlow * 0.76 + (1.0 - y) * 0.28, 0.0, 1.0));
   return half4(warm * alpha, alpha);
@@ -282,7 +289,7 @@ function makeTorchUniforms(marker, now = Date.now()) {
 function makeBeamUniforms(marker, now = Date.now()) {
   const settings = getMarkerSettings(marker);
   const flicker = flickerValue(marker, now);
-  const spread = clamp((settings.beamWidth / Math.max(settings.beamLength, 1)) * 1.35, 0.22, 0.98);
+  const spread = clamp((settings.beamWidth / Math.max(settings.beamLength, 1)) * 1.65, 0.26, 1.20);
   return [
     { name: "color", value: settings.color },
     { name: "hotspotColor", value: settings.hotspotColor },

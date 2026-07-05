@@ -1,6 +1,6 @@
 {
   "name": "Torchlight",
-  "version": "1.7.3",
+  "version": "1.7.4",
   "manifest_version": 1,
   "description": "Placeable torch and window lights with multiple styles, hotspot color, and beam variants.",
   "author": "Mr.Lemonoid",
