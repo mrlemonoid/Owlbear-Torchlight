@@ -1,8 +1,8 @@
 {
   "name": "Torchlight",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "manifest_version": 1,
-  "description": "Placeable flickering torchlights and door/window beam lights for Owlbear Rodeo with centered attached glow.",
+  "description": "Placeable flickering torchlights and door/window beam lights with centered attachment glow.",
   "author": "Mr.Lemonoid",
   "icon": "/icon.svg",
   "action": {

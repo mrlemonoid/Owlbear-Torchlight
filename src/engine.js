@@ -107,12 +107,22 @@ function markerDimensions(marker) {
   return { width, height, radius };
 }
 
-function attachedEffectBase(builder, marker) {
+function attachmentPositionForEffect(width, height) {
+  // Effect items draw from their own top-left origin.
+  // The parent marker origin is the shape center, so the local attachment offset must be
+  // negative half-size to put the glow's visual center on the marker center.
+  return {
+    x: -width / 2,
+    y: -height / 2,
+  };
+}
+
+function attachedEffectBase(builder, marker, width, height) {
   return builder
     .effectType("ATTACHMENT")
     .attachedTo(marker.id)
     .disableAttachmentBehavior(["VISIBLE"])
-    .position({ x: 0, y: 0 })
+    .position(attachmentPositionForEffect(width, height))
     .rotation(0)
     .scale({ x: 1, y: 1 });
 }
@@ -177,7 +187,7 @@ function buildLocalGlow(marker, now = Date.now()) {
   const type = markerSourceType(marker);
   const { width, height } = markerDimensions(marker);
 
-  const effect = attachedEffectBase(buildEffect(), marker)
+  const effect = attachedEffectBase(buildEffect(), marker, width, height)
     .name(`${type === "beam" ? "Door/Window Light" : "Flickering Light"} Glow - ${marker.name ?? "Light"}`)
     .width(width)
     .height(height)
@@ -250,7 +260,7 @@ function updateLocalDraft(item, marker, now = Date.now()) {
     item.zIndex = 999998;
     item.width = width;
     item.height = height;
-    item.position = { x: 0, y: 0 };
+    item.position = attachmentPositionForEffect(width, height);
     item.rotation = 0;
     item.scale = { x: 1, y: 1 };
     item.sksl = type === "beam" ? BEAM_SKSL : GLOW_SKSL;
