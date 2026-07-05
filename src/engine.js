@@ -564,8 +564,8 @@ export async function createDoorWindowLight(settings = {}) {
   const marker = buildShape()
     .name("Door / Window Light Source")
     .shapeType("CIRCLE")
-    .width(8)
-    .height(8)
+    .width(40)
+    .height(40)
     .position(position)
     .layer("PROP")
     .zIndex(999999)
@@ -610,8 +610,8 @@ export async function applySettingsToSelected(settingsPatch = {}) {
 
       if (settings.sourceType === "beam") {
         item.shapeType = "CIRCLE";
-        item.width = 8;
-        item.height = 8;
+        item.width = 40;
+        item.height = 40;
         item.scale = { x: 1, y: 1 };
       }
 

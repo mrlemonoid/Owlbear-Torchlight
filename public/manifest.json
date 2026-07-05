@@ -1,8 +1,8 @@
 {
   "name": "Torchlight",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "manifest_version": 1,
-  "description": "Placeable torch and door/window lights with beam source item for Smoke & Spectre.",
+  "description": "Placeable torch and door/window lights with larger beam source marker.",
   "author": "Mr.Lemonoid",
   "icon": "/icon.svg",
   "action": {
