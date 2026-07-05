@@ -32,6 +32,7 @@ export const DEFAULT_TORCH_SETTINGS = {
   fogLight: false,
   color: { x: 1.0, y: 0.502, z: 0.0 },
   hotspotColor: { x: 1.0, y: 0.91, z: 0.62 },
+  torchBars: 8,
 };
 
 export const DEFAULT_BEAM_SETTINGS = {
@@ -49,6 +50,7 @@ export const DEFAULT_BEAM_SETTINGS = {
   fogLight: false,
   color: { x: 1.0, y: 0.72, z: 0.34 },
   hotspotColor: { x: 1.0, y: 0.94, z: 0.78 },
+  beamBars: 5,
 };
 
 export const DEFAULT_SETTINGS = DEFAULT_TORCH_SETTINGS;
@@ -88,11 +90,13 @@ export function mergeSettings(settings = {}) {
     radius: clamp(settings.radius ?? defaults.radius ?? DEFAULT_TORCH_SETTINGS.radius, 40, 1400),
     sourceRadius: clamp(settings.sourceRadius ?? defaults.sourceRadius ?? DEFAULT_TORCH_SETTINGS.sourceRadius, 1, 400),
     beamLength: clamp(settings.beamLength ?? defaults.beamLength ?? DEFAULT_BEAM_SETTINGS.beamLength, 60, 1800),
-    beamWidth: clamp(settings.beamWidth ?? defaults.beamWidth ?? DEFAULT_BEAM_SETTINGS.beamWidth, 20, 900),
+    beamWidth: clamp(settings.beamWidth ?? defaults.beamWidth ?? DEFAULT_BEAM_SETTINGS.beamWidth, 20, 1800),
     intensity: clamp(settings.intensity ?? defaults.intensity, 0, 2),
     flicker: clamp01(settings.flicker ?? defaults.flicker),
     speed: clamp(settings.speed ?? defaults.speed, 0.1, 4),
     irregularity: clamp(settings.irregularity ?? defaults.irregularity, 0, 1),
+    torchBars: clamp(settings.torchBars ?? defaults.torchBars ?? DEFAULT_TORCH_SETTINGS.torchBars, 2, 24),
+    beamBars: clamp(settings.beamBars ?? defaults.beamBars ?? DEFAULT_BEAM_SETTINGS.beamBars, 2, 20),
     markerOpacity: clamp01(settings.markerOpacity ?? defaults.markerOpacity),
     visualGlow: settings.visualGlow ?? defaults.visualGlow,
     fogLight: settings.fogLight ?? defaults.fogLight,

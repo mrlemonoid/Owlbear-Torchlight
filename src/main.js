@@ -102,12 +102,14 @@ function render() {
         ${settings.sourceType === "beam" ? `
           ${choiceField("beamStyle", "Beam Style", settings.beamStyle, BEAM_STYLE_OPTIONS)}
           ${range("beamLength", "Beam Length", Math.round(settings.beamLength), 60, 1800, 10, " px")}
-          ${range("beamWidth", "Beam Width", Math.round(settings.beamWidth), 20, 900, 10, " px")}
+          ${range("beamWidth", "Beam Width", Math.round(settings.beamWidth), 20, 1800, 10, " px")}
+          ${range("beamBars", "Bar Count", Math.round(settings.beamBars), 2, 20, 1)}
           ${range("irregularity", "Softness / Breakup", pct(settings.irregularity), 0, 100, 1, "%")}
         ` : `
           ${choiceField("torchStyle", "Torch Style", settings.torchStyle, TORCH_STYLE_OPTIONS)}
           ${range("radius", "Radius", Math.round(settings.radius), 40, 1400, 10, " px")}
           ${range("sourceRadius", "Hot Core", Math.round(settings.sourceRadius), 1, 400, 1, " px")}
+          ${range("torchBars", "Bar Count", Math.round(settings.torchBars), 2, 24, 1)}
           ${range("irregularity", "Shape Irregularity", pct(settings.irregularity), 0, 100, 1, "%")}
         `}
         ${range("intensity", "Intensity", pct(settings.intensity), 0, 200, 1, "%")}
@@ -138,6 +140,8 @@ function toPatch(key, rawValue, inputType = "range") {
   if (key === "sourceRadius") return { sourceRadius: Number(rawValue) };
   if (key === "beamLength") return { beamLength: Number(rawValue) };
   if (key === "beamWidth") return { beamWidth: Number(rawValue) };
+  if (key === "torchBars") return { torchBars: Number(rawValue) };
+  if (key === "beamBars") return { beamBars: Number(rawValue) };
   if (key === "torchStyle") return { torchStyle: String(rawValue) };
   if (key === "beamStyle") return { beamStyle: String(rawValue) };
   if (key === "irregularity") return { irregularity: Number(rawValue) / 100 };
@@ -173,6 +177,8 @@ function updateValueDisplay(id) {
   if (id === "sourceRadius") valueEl.textContent = `${Math.round(settings.sourceRadius)} px`;
   if (id === "beamLength") valueEl.textContent = `${Math.round(settings.beamLength)} px`;
   if (id === "beamWidth") valueEl.textContent = `${Math.round(settings.beamWidth)} px`;
+  if (id === "torchBars") valueEl.textContent = `${Math.round(settings.torchBars)}`;
+  if (id === "beamBars") valueEl.textContent = `${Math.round(settings.beamBars)}`;
   if (id === "irregularity") valueEl.textContent = `${pct(settings.irregularity)}%`;
   if (id === "intensity") valueEl.textContent = `${pct(settings.intensity)}%`;
   if (id === "flicker") valueEl.textContent = `${pct(settings.flicker)}%`;

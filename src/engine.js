@@ -21,6 +21,7 @@ uniform float flicker;
 uniform float coreSize;
 uniform float styleIndex;
 uniform float irregularity;
+uniform float barCount;
 
 float stripeMask(float p, float frequency, float thickness) {
   float s = abs(sin(p * frequency));
@@ -55,8 +56,8 @@ half4 main(float2 coord) {
     alpha *= 1.0 - rim * 0.12;
     finalColor = mix(finalColor, hotspotColor, 0.10 + 0.08 * bowl);
   } else if (styleIndex > 1.5 && styleIndex < 2.5) {
-    float spokes = stripeMask(angle / 6.2831853, 8.0, 0.18);
-    float rings = stripeMask(d, 17.0, 0.20) * smoothstep(0.08, 0.98, d);
+    float spokes = stripeMask(angle / 6.2831853, max(3.0, barCount), 0.18);
+    float rings = stripeMask(d, 9.0 + barCount, 0.20) * smoothstep(0.08, 0.98, d);
     float cage = clamp(spokes * 0.65 + rings * 0.55, 0.0, 1.0);
     alpha *= 1.0 - cage * 0.26;
     finalColor = mix(finalColor, color, cage * 0.20);
@@ -80,6 +81,7 @@ uniform float flicker;
 uniform float spread;
 uniform float styleIndex;
 uniform float irregularity;
+uniform float barCount;
 
 float stripeMask(float p, float frequency, float thickness) {
   float s = abs(sin(p * frequency));
@@ -106,14 +108,14 @@ half4 main(float2 coord) {
   float styleShadow = 1.0;
 
   if (styleIndex > 0.5 && styleIndex < 1.5) {
-    float bars = stripeMask(projectedX, 2.4, 0.16);
+    float bars = stripeMask(projectedX, max(2.0, barCount) * 0.62, 0.16);
     styleShadow = 1.0 - bars * 0.42;
   } else if (styleIndex > 1.5 && styleIndex < 2.5) {
-    float bars = stripeMask(projectedX, 2.8, 0.16);
-    float grate = stripeMask(y, 16.0, 0.17) * smoothstep(0.02, 0.24, y);
+    float bars = stripeMask(projectedX, max(2.0, barCount) * 0.68, 0.16);
+    float grate = stripeMask(y, 10.0 + barCount, 0.17) * smoothstep(0.02, 0.24, y);
     styleShadow = 1.0 - clamp(bars * 0.36 + grate * 0.20, 0.0, 0.72);
   } else if (styleIndex > 2.5) {
-    float bars = stripeMask(projectedX, 3.8, 0.18);
+    float bars = stripeMask(projectedX, max(2.0, barCount) * 0.92, 0.18);
     styleShadow = 1.0 - bars * 0.56;
   }
 
@@ -273,21 +275,23 @@ function makeTorchUniforms(marker, now = Date.now()) {
     { name: "coreSize", value: clamp(settings.sourceRadius / Math.max(radius, 1), 0.04, 0.62) },
     { name: "styleIndex", value: torchStyleIndex(settings.torchStyle) },
     { name: "irregularity", value: clamp(settings.irregularity, 0, 1) },
+    { name: "barCount", value: clamp(settings.torchBars, 2, 24) },
   ];
 }
 
 function makeBeamUniforms(marker, now = Date.now()) {
   const settings = getMarkerSettings(marker);
-  const { width } = markerDimensions(marker);
   const flicker = flickerValue(marker, now);
+  const spread = clamp((settings.beamWidth / Math.max(settings.beamLength, 1)) * 1.35, 0.22, 0.98);
   return [
     { name: "color", value: settings.color },
     { name: "hotspotColor", value: settings.hotspotColor },
     { name: "intensity", value: clamp(settings.intensity, 0, 2) },
     { name: "flicker", value: flicker },
-    { name: "spread", value: clamp(width / Math.max(settings.beamWidth, 1) * 0.68, 0.28, 1.0) },
+    { name: "spread", value: spread },
     { name: "styleIndex", value: beamStyleIndex(settings.beamStyle) },
     { name: "irregularity", value: clamp(settings.irregularity, 0, 1) },
+    { name: "barCount", value: clamp(settings.beamBars, 2, 20) },
   ];
 }
 
