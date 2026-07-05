@@ -117,6 +117,14 @@ function effectPositionFromMarker(marker, width, height) {
   };
 }
 
+function torchGlowPosition(marker, width, height) {
+  const center = marker?.position ?? { x: 0, y: 0 };
+  return {
+    x: center.x - width / 2,
+    y: center.y - height / 2,
+  };
+}
+
 function flickerValue(marker, now = Date.now()) {
   const meta = marker?.metadata?.[MARKER_KEY] ?? {};
   const settings = getMarkerSettings(marker);
@@ -175,21 +183,57 @@ function makeBeamUniforms(marker, now = Date.now()) {
 
 function buildLocalGlow(marker, now = Date.now()) {
   const type = markerSourceType(marker);
-  const { baseWidth, baseHeight } = markerDimensions(marker);
+  const { baseWidth, baseHeight, width, height } = markerDimensions(marker);
+
+  if (type === "beam") {
+    const effect = buildEffect()
+      .name(`Door/Window Light Glow - ${marker.name ?? "Light"}`)
+      .effectType("ATTACHMENT")
+      .attachedTo(marker.id)
+      .width(baseWidth)
+      .height(baseHeight)
+      .position({ x: 0, y: 0 })
+      .rotation(0)
+      .scale({ x: 1, y: 1 })
+      .layer("PROP")
+      .zIndex(999998)
+      .sksl(BEAM_SKSL)
+      .uniforms(makeBeamUniforms(marker, now))
+      .blendMode("SCREEN")
+      .locked(true)
+      .disableHit(true)
+      .build();
+
+    effect.metadata = {
+      ...(effect.metadata ?? {}),
+      [LOCAL_KEY]: {
+        kind: "glow",
+        targetId: marker.id,
+        sourceType: "beam",
+        renderMode: "beam-attached",
+      },
+    };
+
+    return effect;
+  }
+
+  const flicker = flickerValue(marker, now);
+  const wobble = 1 + (flicker - 1) * 0.06;
+  const effectWidth = width * wobble;
+  const effectHeight = height * wobble;
 
   const effect = buildEffect()
-    .name(`${type === "beam" ? "Door/Window Light" : "Flickering Light"} Glow - ${marker.name ?? "Light"}`)
-    .effectType("ATTACHMENT")
-    .attachedTo(marker.id)
-    .width(baseWidth)
-    .height(baseHeight)
-    .position({ x: 0, y: 0 })
+    .name(`Flickering Light Glow - ${marker.name ?? "Light"}`)
+    .effectType("STANDALONE")
+    .width(effectWidth)
+    .height(effectHeight)
+    .position(torchGlowPosition(marker, effectWidth, effectHeight))
     .rotation(0)
     .scale({ x: 1, y: 1 })
     .layer("PROP")
     .zIndex(999998)
-    .sksl(type === "beam" ? BEAM_SKSL : GLOW_SKSL)
-    .uniforms(type === "beam" ? makeBeamUniforms(marker, now) : makeTorchUniforms(marker, now))
+    .sksl(GLOW_SKSL)
+    .uniforms(makeTorchUniforms(marker, now))
     .blendMode("SCREEN")
     .locked(true)
     .disableHit(true)
@@ -200,7 +244,8 @@ function buildLocalGlow(marker, now = Date.now()) {
     [LOCAL_KEY]: {
       kind: "glow",
       targetId: marker.id,
-      renderMode: "attached-prop-effect",
+      sourceType: "torch",
+      renderMode: "torch-standalone",
     },
   };
 
@@ -248,27 +293,56 @@ function updateLocalDraft(item, marker, now = Date.now()) {
   item.disableHit = true;
 
   if (kind === "glow" && isEffect(item)) {
-    item.name = `${type === "beam" ? "Door/Window Light" : "Flickering Light"} Glow - ${marker.name ?? "Light"}`;
-    item.effectType = "ATTACHMENT";
-    item.attachedTo = marker.id;
-    item.layer = "PROP";
-    item.zIndex = 999998;
-    item.width = baseWidth;
-    item.height = baseHeight;
-    item.position = { x: 0, y: 0 };
-    item.rotation = 0;
-    item.scale = { x: 1, y: 1 };
-    delete item.disableAttachmentBehavior;
-    item.sksl = type === "beam" ? BEAM_SKSL : GLOW_SKSL;
-    item.blendMode = "SCREEN";
-    item.uniforms = type === "beam" ? makeBeamUniforms(marker, now) : makeTorchUniforms(marker, now);
-    item.metadata = item.metadata ?? {};
-    item.metadata[LOCAL_KEY] = {
-      ...(item.metadata[LOCAL_KEY] ?? {}),
-      kind: "glow",
-      targetId: marker.id,
-      renderMode: "attached-prop-effect",
-    };
+    if (type === "beam") {
+      item.name = `Door/Window Light Glow - ${marker.name ?? "Light"}`;
+      item.effectType = "ATTACHMENT";
+      item.attachedTo = marker.id;
+      item.layer = "PROP";
+      item.zIndex = 999998;
+      item.width = baseWidth;
+      item.height = baseHeight;
+      item.position = { x: 0, y: 0 };
+      item.rotation = 0;
+      item.scale = { x: 1, y: 1 };
+      delete item.disableAttachmentBehavior;
+      item.sksl = BEAM_SKSL;
+      item.blendMode = "SCREEN";
+      item.uniforms = makeBeamUniforms(marker, now);
+      item.metadata = item.metadata ?? {};
+      item.metadata[LOCAL_KEY] = {
+        ...(item.metadata[LOCAL_KEY] ?? {}),
+        kind: "glow",
+        targetId: marker.id,
+        sourceType: "beam",
+        renderMode: "beam-attached",
+      };
+    } else {
+      const wobble = 1 + (flicker - 1) * 0.06;
+      const effectWidth = width * wobble;
+      const effectHeight = height * wobble;
+      item.name = `Flickering Light Glow - ${marker.name ?? "Light"}`;
+      item.effectType = "STANDALONE";
+      item.attachedTo = undefined;
+      item.disableAttachmentBehavior = undefined;
+      item.layer = "PROP";
+      item.zIndex = 999998;
+      item.width = effectWidth;
+      item.height = effectHeight;
+      item.position = torchGlowPosition(marker, effectWidth, effectHeight);
+      item.rotation = 0;
+      item.scale = { x: 1, y: 1 };
+      item.sksl = GLOW_SKSL;
+      item.blendMode = "SCREEN";
+      item.uniforms = makeTorchUniforms(marker, now);
+      item.metadata = item.metadata ?? {};
+      item.metadata[LOCAL_KEY] = {
+        ...(item.metadata[LOCAL_KEY] ?? {}),
+        kind: "glow",
+        targetId: marker.id,
+        sourceType: "torch",
+        renderMode: "torch-standalone",
+      };
+    }
   }
 
   if (kind === "light" && isLight(item)) {
@@ -375,9 +449,14 @@ export async function syncLocalLights() {
     const staleGlow =
       glow &&
       (!isEffect(glow) ||
-        glow.effectType !== "ATTACHMENT" ||
-        glow.attachedTo !== marker.id ||
-        glow.layer !== "PROP");
+        (type === "beam" &&
+          (glow.effectType !== "ATTACHMENT" ||
+            glow.attachedTo !== marker.id ||
+            glow.metadata?.[LOCAL_KEY]?.renderMode !== "beam-attached")) ||
+        (type === "torch" &&
+          (glow.effectType !== "STANDALONE" ||
+            glow.attachedTo ||
+            glow.metadata?.[LOCAL_KEY]?.renderMode !== "torch-standalone")));
 
     if (settings.visualGlow) {
       if (staleGlow) {

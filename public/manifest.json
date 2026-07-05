@@ -1,8 +1,8 @@
 {
   "name": "Torchlight",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "manifest_version": 1,
-  "description": "Placeable flickering torchlights and door/window beam lights using prop-layer attachment effects.",
+  "description": "Placeable torch and door/window lights with separate stable renderers.",
   "author": "Mr.Lemonoid",
   "icon": "/icon.svg",
   "action": {
