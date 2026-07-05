@@ -74,6 +74,12 @@ half4 main(float2 coord) {
 }
 `;
 
+const markerBoundsCache = new Map();
+
+function markerCenter(marker) {
+  return markerBoundsCache.get(marker.id)?.center ?? marker?.position ?? { x: 0, y: 0 };
+}
+
 export function isFlickerMarker(item) {
   const kind = item?.metadata?.[MARKER_KEY]?.kind;
   return Boolean(isShape(item) && (kind === "flickering-light" || kind === "door-window-light"));
@@ -101,26 +107,18 @@ function markerDimensions(marker) {
   const scaleY = Math.abs(marker?.scale?.y ?? 1) || 1;
   const fallbackWidth = settings.sourceType === "beam" ? settings.beamWidth : settings.radius * 2;
   const fallbackHeight = settings.sourceType === "beam" ? settings.beamLength : settings.radius * 2;
-  const baseWidth = Math.max(20, Number(marker?.width ?? fallbackWidth));
-  const baseHeight = Math.max(20, Number(marker?.height ?? fallbackHeight));
-  const width = baseWidth * scaleX;
-  const height = baseHeight * scaleY;
+  const width = Math.max(20, Number(marker?.width ?? fallbackWidth) * scaleX);
+  const height = Math.max(20, Number(marker?.height ?? fallbackHeight) * scaleY);
   const radius = Math.max(width, height) / 2;
-  return { baseWidth, baseHeight, width, height, radius, scaleX, scaleY };
+  return { width, height, radius };
 }
 
-const markerBoundsCache = new Map();
-
-function markerCenter(marker) {
-  return markerBoundsCache.get(marker.id)?.center ?? marker?.position ?? { x: 0, y: 0 };
-}
-
-
-function effectPositionFromMarker(marker) {
-  // Standalone effects use the same item transform fields as shapes:
-  // position, rotation, scale, width and height.
-  // Do not derive a top-left from the bounds center; that breaks as soon as the marker is rotated.
-  return { ...(marker?.position ?? { x: 0, y: 0 }) };
+function effectPositionFromMarker(marker, width, height) {
+  const center = markerCenter(marker);
+  return {
+    x: center.x - width / 2,
+    y: center.y - height / 2,
+  };
 }
 
 function flickerValue(marker, now = Date.now()) {
@@ -181,16 +179,19 @@ function makeBeamUniforms(marker, now = Date.now()) {
 
 function buildLocalGlow(marker, now = Date.now()) {
   const type = markerSourceType(marker);
-  const { baseWidth, baseHeight } = markerDimensions(marker);
+  const { width, height } = markerDimensions(marker);
+  const flicker = flickerValue(marker, now);
+  const wobble = type === "torch" ? (1 + (flicker - 1) * 0.06) : 1;
+  const effectWidth = width * wobble;
+  const effectHeight = height * wobble;
 
   const effect = buildEffect()
     .name(`${type === "beam" ? "Door/Window Light" : "Flickering Light"} Glow - ${marker.name ?? "Light"}`)
     .effectType("STANDALONE")
-    .width(baseWidth)
-    .height(baseHeight)
-    .position(effectPositionFromMarker(marker))
+    .width(effectWidth)
+    .height(effectHeight)
+    .position(effectPositionFromMarker(marker, effectWidth, effectHeight))
     .rotation(marker.rotation ?? 0)
-    .scale({ ...(marker.scale ?? { x: 1, y: 1 }) })
     .layer("PROP")
     .zIndex(999998)
     .sksl(type === "beam" ? BEAM_SKSL : GLOW_SKSL)
@@ -244,25 +245,26 @@ function updateLocalDraft(item, marker, now = Date.now()) {
   const settings = getMarkerSettings(marker);
   const type = markerSourceType(marker);
   const kind = localKind(item);
-  const { baseWidth, baseHeight, width, height, radius } = markerDimensions(marker);
+  const { width, height, radius } = markerDimensions(marker);
   const flicker = flickerValue(marker, now);
 
   item.visible = marker.visible !== false;
+  item.position = { ...markerCenter(marker) };
+  item.rotation = marker.rotation ?? 0;
   item.locked = true;
   item.disableHit = true;
+  item.zIndex = 999999;
 
   if (kind === "glow" && isEffect(item)) {
+    const wobble = type === "torch" ? (1 + (flicker - 1) * 0.06) : 1;
     item.name = `${type === "beam" ? "Door/Window Light" : "Flickering Light"} Glow - ${marker.name ?? "Light"}`;
     item.layer = "PROP";
     item.effectType = "STANDALONE";
-    item.attachedTo = undefined;
-    item.disableAttachmentBehavior = undefined;
     item.zIndex = 999998;
-    item.width = baseWidth;
-    item.height = baseHeight;
-    item.position = effectPositionFromMarker(marker);
+    item.width = width * wobble;
+    item.height = height * wobble;
+    item.position = effectPositionFromMarker(marker, item.width, item.height);
     item.rotation = marker.rotation ?? 0;
-    item.scale = { ...(marker.scale ?? { x: 1, y: 1 }) };
     item.sksl = type === "beam" ? BEAM_SKSL : GLOW_SKSL;
     item.blendMode = "SCREEN";
     item.uniforms = type === "beam" ? makeBeamUniforms(marker, now) : makeTorchUniforms(marker, now);
@@ -341,7 +343,7 @@ export async function syncLocalLights() {
     try {
       markerBoundsCache.set(marker.id, await OBR.scene.items.getItemBounds([marker.id]));
     } catch (error) {
-      console.warn("Torchlight: could not read marker bounds", error);
+      console.warn("Flickering Light: could not read marker bounds", error);
     }
   }
 
@@ -379,16 +381,8 @@ export async function syncLocalLights() {
     if (type === "torch" && settings.fogLight) await upsertLocal(light, buildLocalLight, marker, now);
     else await safeDeleteItems([light?.id]);
 
-    if (settings.visualGlow) {
-      if (glow && !isEffect(glow)) {
-        await safeDeleteItems([glow.id]);
-        await safeAddItem(buildLocalGlow(marker, now));
-      } else {
-        await upsertLocal(glow, buildLocalGlow, marker, now);
-      }
-    } else {
-      await safeDeleteItems([glow?.id]);
-    }
+    if (settings.visualGlow) await upsertLocal(glow, buildLocalGlow, marker, now);
+    else await safeDeleteItems([glow?.id]);
   }
 }
 
