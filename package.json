@@ -1,6 +1,6 @@
 {
   "name": "torchlight",
-  "version": "1.6.1",
+  "version": "1.7.0",
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",

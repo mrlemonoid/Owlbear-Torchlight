@@ -3,6 +3,8 @@ import "./style.css";
 import {
   DEFAULT_SETTINGS,
   MARKER_KEY,
+  TORCH_STYLE_OPTIONS,
+  BEAM_STYLE_OPTIONS,
   colorToHex,
   hexToColor,
   mergeSettings,
@@ -45,6 +47,16 @@ function checkbox(id, label, checked) {
     </label>
   `;
 }
+function selectField(id, label, value, options) {
+  return `
+    <label class="field" for="${id}">
+      <span class="field__top"><span>${label}</span><strong>${options.find((option) => option.value === value)?.label ?? value}</strong></span>
+      <select id="${id}" class="select-input" data-setting="${id}">
+        ${options.map((option) => `<option value="${option.value}" ${option.value === value ? "selected" : ""}>${option.label}</option>`).join("")}
+      </select>
+    </label>
+  `;
+}
 
 function render() {
   app.innerHTML = `
@@ -52,7 +64,7 @@ function render() {
       <header class="hero">
         <div>
           <p class="eyebrow">Owlbear Rodeo</p>
-          <h1>Flickering Light</h1>
+          <h1>Torchlight</h1>
         </div>
         <div class="status ${connected ? "on" : "off"}">${connected ? "LIVE" : "OFF"}</div>
       </header>
@@ -65,27 +77,31 @@ function render() {
             <path d="M32 30.5c3.5 4.3 6.1 7.8 6.1 12.7 0 5-2.8 8.2-6.1 8.2s-6.1-3.2-6.1-8.2c0-4.9 2.6-8.4 6.1-12.7Z"></path>
           </svg>
         </div>
-        <p class="muted center">Place this over torches, fires, lamps, or magic light sources. Move and resize the circle on the scene.</p>
+        <p class="muted center">Place this over torches, braziers, caged flames, windows, or magical lights. Choose a style, tweak the glow, and place it on the scene.</p>
       </section>
 
       <section class="card">
         <h2>Light Source</h2>
         <div class="actions-main three-actions">
-          <button id="addLight" class="primary" type="button">Add Flickering Light</button>
-          <button id="addBeam" class="primary secondary-primary" type="button">Add Door / Window Light</button>
+          <button id="addLight" class="primary" type="button">Add Torch Light</button>
+          <button id="addBeam" class="primary secondary-primary" type="button">Add Window / Beam Light</button>
           <button id="deleteLight" type="button">Delete Selected</button>
         </div>
-        <p class="muted" id="selectionInfo">${selectedCount ? `${selectedCount} flickering light selected.` : "No flickering light selected. Sliders set the next light you add."}</p>
+        <p class="muted" id="selectionInfo">${selectedCount ? `${selectedCount} Torchlight item selected.` : "No Torchlight item selected. The controls set the next light you add."}</p>
       </section>
 
       <section class="card compact">
         <h2 class="section-title">Settings</h2>
         ${settings.sourceType === "beam" ? `
+          ${selectField("beamStyle", "Beam Style", settings.beamStyle, BEAM_STYLE_OPTIONS)}
           ${range("beamLength", "Beam Length", Math.round(settings.beamLength), 60, 1800, 10, " px")}
           ${range("beamWidth", "Beam Width", Math.round(settings.beamWidth), 20, 900, 10, " px")}
+          ${range("irregularity", "Softness / Breakup", pct(settings.irregularity), 0, 100, 1, "%")}
         ` : `
+          ${selectField("torchStyle", "Torch Style", settings.torchStyle, TORCH_STYLE_OPTIONS)}
           ${range("radius", "Radius", Math.round(settings.radius), 40, 1400, 10, " px")}
           ${range("sourceRadius", "Hot Core", Math.round(settings.sourceRadius), 1, 400, 1, " px")}
+          ${range("irregularity", "Shape Irregularity", pct(settings.irregularity), 0, 100, 1, "%")}
         `}
         ${range("intensity", "Intensity", pct(settings.intensity), 0, 200, 1, "%")}
         ${range("flicker", "Flicker Amount", pct(settings.flicker), 0, 100, 1, "%")}
@@ -95,10 +111,14 @@ function render() {
           <span class="field__top"><span>Light Color</span><strong>${colorToHex(settings.color).toUpperCase()}</strong></span>
           <input id="color" class="color-input" type="color" value="${colorToHex(settings.color)}" />
         </label>
+        <label class="field" for="hotspotColor">
+          <span class="field__top"><span>Hotspot Color</span><strong>${colorToHex(settings.hotspotColor).toUpperCase()}</strong></span>
+          <input id="hotspotColor" class="color-input" type="color" value="${colorToHex(settings.hotspotColor)}" />
+        </label>
         ${checkbox("visualGlow", settings.sourceType === "beam" ? "Visible beam glow" : "Visual glow on the map", settings.visualGlow)}
-        ${settings.sourceType === "beam" ? `<p class="muted small-note">Beam marker is the invisible source point. Use Smoke & Spectre Create Torchlight on this selected source item; adjust length/width with the sliders.</p>` : `
+        ${settings.sourceType === "beam" ? `<p class="muted small-note">Window / beam styles can simulate clean light, barred windows, grates, or cage shadows. Use Smoke & Spectre Create Torchlight on the selected source item if you also want fog reveal.</p>` : `
           ${checkbox("fogLight", "Native Owlbear fog light / fog cut", settings.fogLight)}
-          <p class="muted small-note">Native Owlbear fog cut is circular and can pass through Smoke & Spectre obstruction lines. Keep it off when S&S wall-aware light is needed.</p>
+          <p class="muted small-note">Torch styles can now use hotspot color and irregular shapes. Keep Owlbear fog light off when Smoke & Spectre wall-aware light is needed.</p>
         `}
       </section>
     </section>
@@ -111,6 +131,9 @@ function toPatch(key, rawValue, inputType = "range") {
   if (key === "sourceRadius") return { sourceRadius: Number(rawValue) };
   if (key === "beamLength") return { beamLength: Number(rawValue) };
   if (key === "beamWidth") return { beamWidth: Number(rawValue) };
+  if (key === "torchStyle") return { torchStyle: String(rawValue) };
+  if (key === "beamStyle") return { beamStyle: String(rawValue) };
+  if (key === "irregularity") return { irregularity: Number(rawValue) / 100 };
   if (key === "intensity") return { intensity: Number(rawValue) / 100 };
   if (key === "flicker") return { flicker: Number(rawValue) / 100 };
   if (key === "speed") return { speed: Number(rawValue) / 100 };
@@ -118,6 +141,7 @@ function toPatch(key, rawValue, inputType = "range") {
   if (key === "visualGlow") return { visualGlow: Boolean(rawValue) };
   if (key === "fogLight") return { fogLight: Boolean(rawValue) };
   if (key === "color") return { color: hexToColor(rawValue) };
+  if (key === "hotspotColor") return { hotspotColor: hexToColor(rawValue) };
   return {};
 }
 
@@ -142,6 +166,7 @@ function updateValueDisplay(id) {
   if (id === "sourceRadius") valueEl.textContent = `${Math.round(settings.sourceRadius)} px`;
   if (id === "beamLength") valueEl.textContent = `${Math.round(settings.beamLength)} px`;
   if (id === "beamWidth") valueEl.textContent = `${Math.round(settings.beamWidth)} px`;
+  if (id === "irregularity") valueEl.textContent = `${pct(settings.irregularity)}%`;
   if (id === "intensity") valueEl.textContent = `${pct(settings.intensity)}%`;
   if (id === "flicker") valueEl.textContent = `${pct(settings.flicker)}%`;
   if (id === "speed") valueEl.textContent = `${Math.round(settings.speed * 100)}%`;
@@ -160,7 +185,7 @@ async function refreshSelection() {
   if (!isEditing) render();
   else {
     const info = document.querySelector("#selectionInfo");
-    if (info) info.textContent = selectedCount ? `${selectedCount} flickering light selected.` : "No flickering light selected. Sliders set the next light you add.";
+    if (info) info.textContent = selectedCount ? `${selectedCount} Torchlight item selected.` : "No Torchlight item selected. The controls set the next light you add.";
   }
 }
 
@@ -174,7 +199,7 @@ function wireEvents() {
     if (!connected) return;
     const marker = await createFlickeringLight(settings);
     selectedCount = 1;
-    await OBR.notification.show("Flickering light added.");
+    await OBR.notification.show("Torch light added.");
     await refreshSelection();
   });
 
@@ -182,7 +207,7 @@ function wireEvents() {
     if (!connected) return;
     const marker = await createDoorWindowLight(settings);
     selectedCount = 1;
-    await OBR.notification.show("Door / window light added.");
+    await OBR.notification.show("Window / beam light added.");
     await refreshSelection();
   });
 
@@ -190,7 +215,7 @@ function wireEvents() {
     if (!connected) return;
     const count = await deleteSelectedFlickerMarkers();
     selectedCount = 0;
-    await OBR.notification.show(count ? "Selected flickering light deleted." : "Select a flickering light first.", count ? "SUCCESS" : "WARNING");
+    await OBR.notification.show(count ? "Selected Torchlight item deleted." : "Select a Torchlight item first.", count ? "SUCCESS" : "WARNING");
     await refreshSelection();
   });
 
@@ -217,11 +242,29 @@ function wireEvents() {
     });
   });
 
+  document.querySelectorAll(".select-input[data-setting]").forEach((input) => {
+    input.addEventListener("change", (event) => {
+      const key = event.currentTarget.dataset.setting;
+      const patch = toPatch(key, event.currentTarget.value, "select");
+      settings = mergeSettings({ ...settings, ...patch });
+      scheduleApply(patch, true);
+      render();
+    });
+  });
+
   document.querySelector("#color")?.addEventListener("input", (event) => {
     const patch = toPatch("color", event.currentTarget.value);
     settings = mergeSettings({ ...settings, ...patch });
     const label = event.currentTarget.closest(".field")?.querySelector("strong");
     if (label) label.textContent = colorToHex(settings.color).toUpperCase();
+    scheduleApply(patch, false);
+  });
+
+  document.querySelector("#hotspotColor")?.addEventListener("input", (event) => {
+    const patch = toPatch("hotspotColor", event.currentTarget.value);
+    settings = mergeSettings({ ...settings, ...patch });
+    const label = event.currentTarget.closest(".field")?.querySelector("strong");
+    if (label) label.textContent = colorToHex(settings.hotspotColor).toUpperCase();
     scheduleApply(patch, false);
   });
 }

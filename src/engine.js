@@ -15,28 +15,59 @@ import {
 const GLOW_SKSL = `
 uniform vec2 size;
 uniform vec3 color;
+uniform vec3 hotspotColor;
 uniform float intensity;
 uniform float flicker;
-uniform float warmth;
 uniform float coreSize;
+uniform float styleIndex;
+uniform float irregularity;
+
+float stripeMask(float p, float frequency, float thickness) {
+  float s = abs(sin(p * frequency));
+  return 1.0 - smoothstep(0.0, thickness, s);
+}
 
 half4 main(float2 coord) {
   vec2 uv = coord / size;
   vec2 p = (uv - vec2(0.5, 0.5)) * 2.0;
-  float d = length(p);
+  float angle = atan(p.y, p.x);
+  float dBase = length(p);
+
+  float noiseA = sin(angle * 6.0 + dBase * 7.0 + flicker * 3.1);
+  float noiseB = sin(angle * 13.0 - dBase * 10.0 - flicker * 1.7);
+  float noiseC = sin(angle * 3.0 + dBase * 15.0 + flicker * 0.9);
+  float edgeWarp = 1.0 + irregularity * (noiseA * 0.12 + noiseB * 0.07 + noiseC * 0.05);
+  float d = dBase / max(0.72, edgeWarp);
 
   float coreRadius = clamp(coreSize, 0.04, 0.62);
-  float outer = 1.0 - smoothstep(0.62, 1.0, d);
-  float mid = 1.0 - smoothstep(max(0.12, coreRadius * 0.75), 0.72, d);
+  float outer = 1.0 - smoothstep(0.56, 1.00, d);
+  float mid = 1.0 - smoothstep(max(0.10, coreRadius * 0.78), 0.74, d);
   float core = 1.0 - smoothstep(0.02, coreRadius, d);
-  float feather = 1.0 - smoothstep(0.92, 1.0, d);
+  float feather = 1.0 - smoothstep(0.90, 1.0, d);
 
-  float alpha = (outer * 0.24 + mid * 0.18 + core * 0.22) * intensity * flicker * feather;
-  alpha = clamp(alpha, 0.0, 0.86);
+  float alpha = (outer * 0.28 + mid * 0.20 + core * 0.24) * intensity * flicker * feather;
+  vec3 finalColor = mix(color, hotspotColor, clamp(core * 0.95 + mid * 0.24, 0.0, 1.0));
 
-  vec3 hotCore = vec3(1.0, 0.88, 0.48);
-  vec3 finalColor = mix(color, hotCore, core * warmth);
+  if (styleIndex > 0.5 && styleIndex < 1.5) {
+    float bowl = smoothstep(0.18, 0.86, uv.y);
+    float rim = smoothstep(0.42, 0.58, d) * (1.0 - smoothstep(0.62, 0.80, d));
+    alpha *= mix(0.82, 1.10, bowl);
+    alpha *= 1.0 - rim * 0.10;
+    finalColor = mix(finalColor, hotspotColor, 0.08 + 0.10 * bowl);
+  } else if (styleIndex > 1.5 && styleIndex < 2.5) {
+    float cageV = stripeMask(uv.x - 0.5, 19.0, 0.18);
+    float cageH = stripeMask(uv.y - 0.5, 17.0, 0.22) * smoothstep(0.0, 0.55, uv.y);
+    float ring = smoothstep(0.56, 0.62, d) * (1.0 - smoothstep(0.68, 0.80, d));
+    float cage = clamp(cageV * 0.80 + cageH * 0.35 + ring * 0.75, 0.0, 1.0);
+    alpha *= 1.0 - cage * 0.28;
+    finalColor = mix(finalColor, color, cage * 0.22);
+  } else if (styleIndex > 2.5) {
+    float lobe = 0.90 + irregularity * 0.25 * sin(angle * 5.0 + flicker * 3.0 + dBase * 8.0);
+    alpha *= lobe;
+    finalColor = mix(finalColor, hotspotColor, 0.10);
+  }
 
+  alpha = clamp(alpha, 0.0, 0.90);
   return half4(finalColor * alpha, alpha);
 }
 `;
@@ -44,32 +75,51 @@ half4 main(float2 coord) {
 const BEAM_SKSL = `
 uniform vec2 size;
 uniform vec3 color;
+uniform vec3 hotspotColor;
 uniform float intensity;
 uniform float flicker;
 uniform float spread;
+uniform float styleIndex;
+uniform float irregularity;
+
+float stripeMask(float p, float frequency, float thickness) {
+  float s = abs(sin(p * frequency));
+  return 1.0 - smoothstep(0.0, thickness, s);
+}
 
 half4 main(float2 coord) {
   vec2 uv = coord / size;
-
   float y = uv.y;
   float x = abs(uv.x - 0.5) * 2.0;
 
-  float halfWidth = mix(0.12, clamp(spread, 0.28, 1.0), y);
-  float edge = 1.0 - smoothstep(halfWidth * 0.72, halfWidth, x);
-
+  float taper = mix(0.12, clamp(spread, 0.24, 1.0), y);
+  float edge = 1.0 - smoothstep(taper * 0.76, taper, x);
   float startFade = smoothstep(0.00, 0.08, y);
   float endFade = 1.0 - smoothstep(0.66, 1.0, y);
-  float sideFeather = 1.0 - smoothstep(0.82, 1.0, x);
-
-  float stripeA = 0.84 + 0.16 * sin((uv.x * 9.0) + (uv.y * 2.0));
-  float stripeB = 0.90 + 0.10 * sin((uv.x * 17.0) - (uv.y * 4.5));
-  float texture = stripeA * stripeB;
-
+  float sideFeather = 1.0 - smoothstep(0.84, 1.0, x);
+  float textureA = 0.88 + 0.12 * sin((uv.x * 10.0) + (uv.y * 2.5));
+  float textureB = 0.92 + 0.08 * sin((uv.x * 17.0) - (uv.y * 5.0));
+  float breakup = 1.0 - irregularity * 0.28 * (0.5 + 0.5 * sin(uv.y * 18.0 + uv.x * 6.0));
   float core = 1.0 - smoothstep(0.0, 0.34, x);
-  float alpha = edge * startFade * endFade * sideFeather * texture * intensity * flicker;
-  alpha = clamp(alpha * 0.52, 0.0, 0.72);
 
-  vec3 warm = mix(color, vec3(1.0, 0.88, 0.52), core * 0.28);
+  float alpha = edge * startFade * endFade * sideFeather * textureA * textureB * breakup * intensity * flicker;
+  float styleShadow = 1.0;
+
+  if (styleIndex > 0.5 && styleIndex < 1.5) {
+    float bars = stripeMask(uv.x - 0.5, 11.0, 0.20);
+    styleShadow = 1.0 - bars * 0.42;
+  } else if (styleIndex > 1.5 && styleIndex < 2.5) {
+    float barsV = stripeMask(uv.x - 0.5, 11.0, 0.20);
+    float barsH = stripeMask(uv.y - 0.1, 18.0, 0.18) * smoothstep(0.04, 0.28, y);
+    styleShadow = 1.0 - clamp(barsV * 0.35 + barsH * 0.24, 0.0, 0.72);
+  } else if (styleIndex > 2.5) {
+    float prison = stripeMask(uv.x - 0.5, 15.5, 0.24);
+    styleShadow = 1.0 - prison * 0.58;
+  }
+
+  alpha *= styleShadow;
+  alpha = clamp(alpha * 0.56, 0.0, 0.78);
+  vec3 warm = mix(color, hotspotColor, clamp(core * 0.72 + (1.0 - y) * 0.22, 0.0, 1.0));
   return half4(warm * alpha, alpha);
 }
 `;
@@ -142,6 +192,21 @@ function rotatePoint(point, degrees) {
   };
 }
 
+
+function torchStyleIndex(style = "classic") {
+  if (style === "brazier") return 1;
+  if (style === "caged") return 2;
+  if (style === "wild") return 3;
+  return 0;
+}
+
+function beamStyleIndex(style = "clean") {
+  if (style === "barred") return 1;
+  if (style === "grated") return 2;
+  if (style === "cage") return 3;
+  return 0;
+}
+
 function beamGlowPosition(marker, width, height) {
   const source = marker?.position ?? { x: 0, y: 0 };
 
@@ -201,10 +266,12 @@ function makeTorchUniforms(marker, now = Date.now()) {
   const flicker = flickerValue(marker, now);
   return [
     { name: "color", value: settings.color },
+    { name: "hotspotColor", value: settings.hotspotColor },
     { name: "intensity", value: clamp(settings.intensity, 0, 2) },
     { name: "flicker", value: flicker },
-    { name: "warmth", value: 0.62 },
     { name: "coreSize", value: clamp(settings.sourceRadius / Math.max(radius, 1), 0.04, 0.62) },
+    { name: "styleIndex", value: torchStyleIndex(settings.torchStyle) },
+    { name: "irregularity", value: clamp(settings.irregularity, 0, 1) },
   ];
 }
 
@@ -214,9 +281,12 @@ function makeBeamUniforms(marker, now = Date.now()) {
   const flicker = flickerValue(marker, now);
   return [
     { name: "color", value: settings.color },
+    { name: "hotspotColor", value: settings.hotspotColor },
     { name: "intensity", value: clamp(settings.intensity, 0, 2) },
     { name: "flicker", value: flicker },
     { name: "spread", value: clamp(width / Math.max(settings.beamWidth, 1) * 0.68, 0.28, 1.0) },
+    { name: "styleIndex", value: beamStyleIndex(settings.beamStyle) },
+    { name: "irregularity", value: clamp(settings.irregularity, 0, 1) },
   ];
 }
 
@@ -261,7 +331,7 @@ function buildLocalGlow(marker, now = Date.now()) {
   const effectHeight = height * wobble;
 
   const effect = buildEffect()
-    .name(`Flickering Light Glow - ${marker.name ?? "Light"}`)
+    .name(`Torchlight Glow - ${marker.name ?? "Light"}`)
     .effectType("STANDALONE")
     .width(effectWidth)
     .height(effectHeight)
@@ -295,7 +365,7 @@ function buildLocalLight(marker, now = Date.now()) {
   const { radius } = markerDimensions(marker);
   const flicker = flickerValue(marker, now);
   const light = buildLight()
-    .name(`Flickering Light Fog - ${marker.name ?? "Torch"}`)
+    .name(`Torchlight Fog - ${marker.name ?? "Torch"}`)
     .position(marker.position)
     .rotation(marker.rotation ?? 0)
     .sourceRadius(Math.max(1, settings.sourceRadius * flicker))
@@ -358,7 +428,7 @@ function updateLocalDraft(item, marker, now = Date.now()) {
       const wobble = 1 + (flicker - 1) * 0.06;
       const effectWidth = width * wobble;
       const effectHeight = height * wobble;
-      item.name = `Flickering Light Glow - ${marker.name ?? "Light"}`;
+      item.name = `Torchlight Glow - ${marker.name ?? "Light"}`;
       item.effectType = "STANDALONE";
       item.attachedTo = undefined;
       item.disableAttachmentBehavior = undefined;
@@ -385,7 +455,7 @@ function updateLocalDraft(item, marker, now = Date.now()) {
 
   if (kind === "light" && isLight(item)) {
     item.position = { ...(marker.position ?? { x: 0, y: 0 }) };
-    item.name = `Flickering Light Fog - ${marker.name ?? "Torch"}`;
+    item.name = `Torchlight Fog - ${marker.name ?? "Torch"}`;
     item.layer = "FOG";
     item.lightType = "PRIMARY";
     item.sourceRadius = Math.max(1, settings.sourceRadius * flicker);
@@ -537,7 +607,7 @@ export async function createFlickeringLight(settings = {}) {
   };
 
   const marker = buildShape()
-    .name("Flickering Light")
+    .name("Torchlight")
     .shapeType("CIRCLE")
     .width(width)
     .height(height)
@@ -562,7 +632,7 @@ export async function createDoorWindowLight(settings = {}) {
   };
 
   const marker = buildShape()
-    .name("Door / Window Light Source")
+    .name("Window / Beam Light Source")
     .shapeType("CIRCLE")
     .width(40)
     .height(40)
