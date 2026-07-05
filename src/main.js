@@ -96,7 +96,7 @@ function render() {
           <input id="color" class="color-input" type="color" value="${colorToHex(settings.color)}" />
         </label>
         ${checkbox("visualGlow", settings.sourceType === "beam" ? "Visible beam glow" : "Visual glow on the map", settings.visualGlow)}
-        ${settings.sourceType === "beam" ? `<p class="muted small-note">Beam light is a visual overlay only. Rotate and resize the rectangle on the map for exact direction.</p>` : `
+        ${settings.sourceType === "beam" ? `<p class="muted small-note">Beam light is a visual overlay. For Smoke & Spectre, apply Create Torchlight to the small “S&S Torch Anchor” circle at the beam center, not the large rectangle.</p>` : `
           ${checkbox("fogLight", "Native Owlbear fog light / fog cut", settings.fogLight)}
           <p class="muted small-note">Native Owlbear fog cut is circular and can pass through Smoke & Spectre obstruction lines. Keep it off when S&S wall-aware light is needed.</p>
         `}

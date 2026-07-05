@@ -1,6 +1,7 @@
 export const ID = "com.mrlemonoid.flickering-light";
 export const MARKER_KEY = `${ID}/marker`;
 export const LOCAL_KEY = `${ID}/local`;
+export const ANCHOR_KEY = `${ID}/ss-anchor`;
 export const SCHEMA_VERSION = 2;
 
 export const DEFAULT_TORCH_SETTINGS = {
