@@ -1,8 +1,8 @@
 {
   "name": "Torchlight",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "manifest_version": 1,
-  "description": "Placeable flickering torchlights and door/window beam lights with rotation-aware standalone glow positioning.",
+  "description": "Placeable flickering torchlights and door/window beam lights with stable transforms.",
   "author": "Mr.Lemonoid",
   "icon": "/icon.svg",
   "action": {
