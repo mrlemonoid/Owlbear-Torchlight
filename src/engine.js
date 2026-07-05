@@ -56,15 +56,15 @@ half4 main(float2 coord) {
     alpha *= 1.0 - rim * 0.12;
     finalColor = mix(finalColor, hotspotColor, 0.10 + 0.08 * bowl);
   } else if (styleIndex > 1.5 && styleIndex < 2.5) {
-    float bars = max(2.0, barCount);
+    float bars = max(2.0, floor(barCount + 0.5));
     float spokeWave = 0.5 + 0.5 * cos(angle * bars);
-    float spokeMask = smoothstep(0.90, 0.985, spokeWave);
-    float ringWave = 0.5 + 0.5 * cos((d - 0.18) * 16.0);
-    float ringMask = smoothstep(0.93, 0.985, ringWave) * smoothstep(0.18, 0.95, d);
-    float cage = clamp(spokeMask * 0.65 + ringMask * 0.38, 0.0, 1.0);
-    float blur = 1.0 - smoothstep(0.78, 1.0, d);
-    alpha *= 1.0 - cage * 0.20 * blur;
-    finalColor = mix(finalColor, color, cage * 0.15 * blur);
+    float spokeMask = smoothstep(0.945, 0.992, spokeWave);
+    float ringWave = 0.5 + 0.5 * cos((d - 0.20) * 15.0);
+    float ringMask = smoothstep(0.955, 0.992, ringWave) * smoothstep(0.28, 0.92, d);
+    float cage = clamp(spokeMask * 0.46 + ringMask * 0.22, 0.0, 1.0);
+    float cageFade = smoothstep(0.26, 0.72, d);
+    alpha *= 1.0 - cage * 0.14 * cageFade;
+    finalColor = mix(finalColor, color, cage * 0.08 * cageFade);
   } else if (styleIndex > 2.5) {
     float lobe = 0.88 + irregularity * 0.28 * sin(angle * 5.0 + flicker * 3.0 + dBase * 8.0);
     alpha *= lobe;
@@ -99,11 +99,11 @@ half4 main(float2 coord) {
   float xAbs = abs(x) * 2.0;
 
   float widthFactor = clamp(spread, 0.05, 1.0);
-  float endSpread = mix(0.42, 0.98, sqrt(widthFactor));
-  float startSpread = endSpread * 0.72;
+  float startSpread = mix(0.10, 0.44, pow(widthFactor, 0.85));
+  float endSpread = min(1.08, startSpread + mix(0.12, 0.62, sqrt(widthFactor)));
   float taper = mix(startSpread, endSpread, smoothstep(0.0, 1.0, y));
   float edge = 1.0 - smoothstep(taper * 0.82, taper, xAbs);
-  float startFade = smoothstep(0.00, 0.035, y);
+  float startFade = smoothstep(0.00, 0.02, y);
   float endFade = 1.0 - smoothstep(0.70, 1.0, y);
   float sideFeather = 1.0 - smoothstep(0.84, 1.0, xAbs);
   float textureA = 0.88 + 0.12 * sin((uv.x * 10.0) + (uv.y * 2.5));
@@ -111,20 +111,20 @@ half4 main(float2 coord) {
   float breakup = 1.0 - irregularity * 0.28 * (0.5 + 0.5 * sin(uv.y * 18.0 + uv.x * 6.0));
 
   float alpha = edge * startFade * endFade * sideFeather * textureA * textureB * breakup * intensity * flicker;
-  float projectedX = x / max(0.03, y + 0.01);
+  float projectedX = x / max(0.04, taper);
   float styleShadow = 1.0;
 
-  float shadowFade = 0.35 + 0.65 * smoothstep(0.0, 0.14, y);
+  float shadowFade = 0.35 + 0.65 * smoothstep(0.0, 0.08, y);
   if (styleIndex > 0.5 && styleIndex < 1.5) {
-    float bars = stripeMask(projectedX, max(2.0, barCount) * 0.62, 0.34);
-    styleShadow = 1.0 - bars * 0.18 * shadowFade;
+    float bars = stripeMask(projectedX, max(2.0, floor(barCount + 0.5)) * 1.55, 0.46);
+    styleShadow = 1.0 - bars * 0.16 * shadowFade;
   } else if (styleIndex > 1.5 && styleIndex < 2.5) {
-    float bars = stripeMask(projectedX, max(2.0, barCount) * 0.68, 0.34);
-    float grate = stripeMask(y, 10.0 + barCount, 0.28) * smoothstep(0.00, 0.18, y);
-    styleShadow = 1.0 - clamp((bars * 0.15 + grate * 0.07) * shadowFade, 0.0, 0.28);
+    float bars = stripeMask(projectedX, max(2.0, floor(barCount + 0.5)) * 1.45, 0.46);
+    float grate = stripeMask(y, 8.0 + barCount * 0.8, 0.34) * smoothstep(0.00, 0.12, y);
+    styleShadow = 1.0 - clamp((bars * 0.12 + grate * 0.05) * shadowFade, 0.0, 0.22);
   } else if (styleIndex > 2.5) {
-    float bars = stripeMask(projectedX, max(2.0, barCount) * 0.92, 0.36);
-    styleShadow = 1.0 - bars * 0.22 * shadowFade;
+    float bars = stripeMask(projectedX, max(2.0, floor(barCount + 0.5)) * 2.0, 0.48);
+    styleShadow = 1.0 - bars * 0.20 * shadowFade;
   }
 
   alpha *= styleShadow;
